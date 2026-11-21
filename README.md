@@ -1,6 +1,36 @@
-# ReadAny-MLX
+<p align="center">
+  <img src="packages/app/public/logo.svg" alt="ReadAny logo" width="112" height="112">
+</p>
 
-[ReadAny](https://github.com/codedogQBY/ReadAny) 的非官方 iOS 修改版，使用 Apple Silicon GPU 在设备上运行 MLX 向量模型。基于官方尚未以 Release 发布的 1.3.7 源码，基线为 [fce44689e1377df1ae99a35e8e71d5e8b3a639d1](https://github.com/codedogQBY/ReadAny/commit/fce44689e1377df1ae99a35e8e71d5e8b3a639d1)。[上游项目说明](README.upstream.md) · [上游中文说明](README_CN.md)
+<h1 align="center">ReadAny-MLX</h1>
+
+<p align="center">
+  <strong>在 iOS 设备上运行 MLX 向量模型 · On-device MLX embeddings for iOS</strong>
+</p>
+
+<p align="center">
+  ReadAny 的非官方 Fork，为 Apple Silicon iPad 提供本地向量化和语义检索。<br>
+  An unofficial ReadAny fork with on-device embeddings and semantic search on Apple Silicon iPad.
+</p>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/Gnon-Golem/ReadAny-MLX/4f775c8da29196bd247bb46c1ab112355952ba87/ReadAny-MLX-1.3.7-build2-iOS.ipa"><strong>下载 IPA · Download IPA</strong></a>
+  &nbsp;·&nbsp; <a href="README.en.md">English guide</a>
+  &nbsp;·&nbsp; <a href="#构建与安装">中文指南</a>
+  &nbsp;·&nbsp; <a href="LICENSE">GPL-3.0</a>
+</p>
+
+## 下载 / Download
+
+| 平台 / Platform | 版本 / Version | 安装包 / Package | 校验 / Verify |
+| --- | --- | --- | --- |
+| iOS arm64 · 实体 iPad / physical iPad | 1.3.7 (build 2) | [完整 IPA / Full IPA · 35 MiB](https://raw.githubusercontent.com/Gnon-Golem/ReadAny-MLX/4f775c8da29196bd247bb46c1ab112355952ba87/ReadAny-MLX-1.3.7-build2-iOS.ipa) | [SHA-256](https://raw.githubusercontent.com/Gnon-Golem/ReadAny-MLX/4f775c8da29196bd247bb46c1ab112355952ba87/SHA256SUMS.txt) |
+
+将 IPA 导入 SideStore，用自己的 Apple ID 签名。Qwen3 权重需[单独下载和导入](#下载和使用模型)。SideStore 重签或续签后能否保留 Increased Memory Limit，取决于新的描述文件及应用签名。下方实测数据来自原 Xcode 签名版，公开 IPA 已验包，SideStore 安装与续签待真机验证。
+
+Import the IPA into SideStore and sign it with your Apple ID. [Download and import the Qwen3 weights separately](README.en.md#download-and-import-the-model). Increased Memory Limit after signing or refreshing depends on the new provisioning profile and app signature. Device results below are from the Xcode-signed build. The public IPA has passed package verification. SideStore installation and refresh are pending device verification.
+
+基于官方尚未以 Release 发布的 1.3.7 源码，基线为 [`fce4468`](https://github.com/codedogQBY/ReadAny/commit/fce44689e1377df1ae99a35e8e71d5e8b3a639d1)。[官方仓库](https://github.com/codedogQBY/ReadAny) · [上游英文说明](README.upstream.md) · [上游中文说明](README_CN.md)
 
 ## 功能
 
@@ -57,4 +87,4 @@ open ios/ReadAnyMLX.xcworkspace
 | [swift-transformers](https://github.com/huggingface/swift-transformers/blob/1.4.0/LICENSE) | 1.4.0 | Apache-2.0 |
 | [Qwen3-Embedding-4B MLX Q8](https://huggingface.co/majentik/Qwen3-Embedding-4B-MLX-8bit) | `bf6643f` | Apache-2.0 |
 
-依赖通过 Swift Package Manager 获取，模型权重由用户从模型发布者下载。本 Fork 发布源码和验证工程。
+依赖通过 Swift Package Manager 获取，模型权重由用户从模型发布者下载。本 Fork 发布[对应源码](https://github.com/Gnon-Golem/ReadAny-MLX/tree/328971a1d9f840e22f0dbce38d61aaf7f764b56e)、验证工程及独立侧载 IPA。
