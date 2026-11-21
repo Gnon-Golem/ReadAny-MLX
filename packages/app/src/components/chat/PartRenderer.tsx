@@ -6,12 +6,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import type {
   AbortedPart,
   CitationPart,
-  WebCitationPart,
   MindmapPart,
   Part,
   ReasoningPart,
   TextPart,
   ToolCallPart,
+  WebCitationPart,
 } from "@readany/core/types/message";
 import { cn } from "@readany/core/utils";
 import {

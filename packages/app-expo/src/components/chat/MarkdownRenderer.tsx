@@ -3,13 +3,13 @@ import { fontSize as fs, radius, useColors } from "@/styles/theme";
 import type { ThemeColors } from "@/styles/theme";
 import { publicWebUrl } from "@readany/core/ai/research";
 import type { CitationPart } from "@readany/core/types/message";
-import { type ChatCitation, openWebCitation } from "./research-citations";
 import * as Clipboard from "expo-clipboard";
 import { Fragment, type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { StyleProp, TextStyle } from "react-native";
 import Markdown, { type RenderRules, type ASTNode } from "react-native-markdown-display";
+import { type ChatCitation, openWebCitation } from "./research-citations";
 
 interface MarkdownRendererProps {
   content: string;

@@ -1,8 +1,8 @@
-import { useAnnotationStore } from "@/stores/annotation-store";
-import { saveWebSourceAtBookCitation } from "@readany/core/ai/research/research-note";
 import { CheckIcon, ChevronDownIcon, CopyIcon } from "@/components/ui/Icon";
+import { useAnnotationStore } from "@/stores/annotation-store";
 import { fontSize as fs, radius, useColors, withOpacity } from "@/styles/theme";
 import type { ThemeColors } from "@/styles/theme";
+import { saveWebSourceAtBookCitation } from "@readany/core/ai/research/research-note";
 import type { CitationPart, MessageV2, QuotePart, TextPart } from "@readany/core/types/message";
 import * as Clipboard from "expo-clipboard";
 /**
@@ -27,8 +27,8 @@ import {
   View,
 } from "react-native";
 import { PartRenderer } from "./PartRenderer";
-import { type ChatCitation, openWebCitation } from "./research-citations";
 import { StreamingIndicator } from "./StreamingIndicator";
+import { type ChatCitation, openWebCitation } from "./research-citations";
 
 interface MessageListProps {
   messages: MessageV2[];

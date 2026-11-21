@@ -22,15 +22,15 @@ import {
   isWebTool,
   summarizeWebToolResult,
 } from "../research/agent-web-tools";
+import { ResearchEvidenceBudget, compactResearchHistory } from "../research/evidence-budget";
+import { EvidenceRegistry, registerToolEvidence } from "../research/evidence-registry";
 import {
+  type ResearchOptions,
   explicitWebUrls,
   publicQuestion,
   publicSearchQuery,
   researchSource,
-  type ResearchOptions,
 } from "../research/research-planner";
-import { ResearchEvidenceBudget, compactResearchHistory } from "../research/evidence-budget";
-import { EvidenceRegistry, registerToolEvidence } from "../research/evidence-registry";
 import { RESEARCH_TOOL_LIMITS, ResearchToolBudget } from "../research/tool-budget";
 import { buildSystemPrompt } from "../system-prompt";
 import { ThinkTagStreamParser } from "../think-tag-parser";
@@ -1231,7 +1231,9 @@ export async function* streamReadingAgent(
         ? () => {
             modelSteps += 1;
             forceSummary = budget.summarizeOnly || modelSteps >= Math.floor(recursionLimit / 2) - 2;
-            return forceSummary ? model : (boundModel ??= withTools(langChainTools));
+            if (forceSummary) return model;
+            boundModel ??= withTools(langChainTools);
+            return boundModel;
           }
         : model,
       tools: langChainTools,

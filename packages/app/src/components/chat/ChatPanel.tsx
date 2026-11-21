@@ -1,8 +1,8 @@
-import { useDesktopResearchOptions } from "@/hooks/use-desktop-research-options";
 /**
  * ChatPanel — book-scoped sidebar chat panel.
  */
 import { ConfigGuideDialog, type ConfigGuideType } from "@/components/shared/ConfigGuideDialog";
+import { useDesktopResearchOptions } from "@/hooks/use-desktop-research-options";
 import { useStreamingChat } from "@/hooks/use-streaming-chat";
 import { useChatStore } from "@/stores/chat-store";
 import { useSettingsStore } from "@/stores/settings-store";

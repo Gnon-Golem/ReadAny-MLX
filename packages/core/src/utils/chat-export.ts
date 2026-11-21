@@ -1,9 +1,9 @@
+import { publicWebUrl } from "../ai/research/web-provider";
 /**
  * Chat export utilities — shared between web (app) and mobile (app-expo).
  * Supports Markdown, JSON, and plain-text clipboard export.
  */
 import type { MessageV2, Part } from "../types/message";
-import { publicWebUrl } from "../ai/research/web-provider";
 import { formatSourceExcerpt, formatWebSourceLink } from "./web-source-format";
 
 /** Options for export functions */

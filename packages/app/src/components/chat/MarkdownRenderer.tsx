@@ -602,7 +602,10 @@ function processCitationText(
     if (typeof child === "string") {
       // Split on [1], [2] patterns
       const parts = child.split(/(\[\d+\])/g);
+      let nextOffset = 0;
       return parts.map((part, i) => {
+        const offset = nextOffset;
+        nextOffset += part.length;
         const match = part.match(/\[(\d+)\]/);
         if (match) {
           const num = Number.parseInt(match[1]);
@@ -615,7 +618,7 @@ function processCitationText(
             if (url)
               return (
                 <a
-                  key={i}
+                  key={`${citation.id}-${offset}`}
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"

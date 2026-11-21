@@ -218,16 +218,19 @@ export function ChatScreen() {
     [sendMessage, navigation, t],
   );
 
-  const handleCitationClick = useCallback((citation: CitationPart) => {
-    if (!citation.bookId || !citation.cfi) return;
-    void openMobileBook({
-      bookId: citation.bookId,
-      navigation,
-      t,
-      cfi: citation.cfi,
-      highlight: true,
-    });
-  }, [navigation, t]);
+  const handleCitationClick = useCallback(
+    (citation: CitationPart) => {
+      if (!citation.bookId || !citation.cfi) return;
+      void openMobileBook({
+        bookId: citation.bookId,
+        navigation,
+        t,
+        cfi: citation.cfi,
+        highlight: true,
+      });
+    },
+    [navigation, t],
+  );
 
   const handleNewThread = useCallback(() => {
     setGeneralActiveThread(null);

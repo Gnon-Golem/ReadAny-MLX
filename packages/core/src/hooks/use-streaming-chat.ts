@@ -30,12 +30,12 @@ import type {
 import {
   createAbortedPart,
   createCitationPart,
-  createWebCitationPart,
   createMindmapPart,
   createQuotePart,
   createReasoningPart,
   createTextPart,
   createToolCallPart,
+  createWebCitationPart,
 } from "../types/message";
 import type { MindmapPart } from "../types/message";
 
