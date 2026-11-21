@@ -210,6 +210,14 @@ export function convertToMessageV2(messages: any[]): MessageV2[] {
       });
     }
 
+    // Older records can have a citations column without parts_order.
+    if (Array.isArray(m.citations)) {
+      for (const citation of m.citations) {
+        if (!citation?.bookId || !citation?.cfi) continue;
+        parts.push({ ...citation, type: "citation", status: "completed", createdAt: m.createdAt });
+      }
+    }
+
     // Add text part
     if (m.content) {
       parts.push({

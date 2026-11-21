@@ -1,3 +1,4 @@
+import type { WebResearchMode } from "@readany/core/ai/research";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -584,6 +585,8 @@ function EndpointCard({
 }
 
 export function AISettings() {
+  const webResearchMode = useSettingsStore((state) => state.webResearchMode);
+  const setWebResearchMode = useSettingsStore((state) => state.setWebResearchMode);
   const { t } = useTranslation();
   const {
     aiConfig,
@@ -640,6 +643,26 @@ export function AISettings() {
 
   return (
     <div className="space-y-6 p-4 pt-3">
+      <section className="rounded-lg bg-muted/60 p-4 space-y-2">
+        <h2 className="text-sm font-medium">{t("research.settingsTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{t("research.provider", { name: "Parallel" })}</p>
+        <div className="flex flex-wrap gap-2">
+          {(["off", "auto", "always"] as const satisfies readonly WebResearchMode[]).map((mode) => (
+            <Button
+              key={mode}
+              size="sm"
+              variant={mode === webResearchMode ? "default" : "outline"}
+              aria-pressed={mode === webResearchMode}
+              onClick={() => setWebResearchMode(mode)}
+            >
+              {t(`research.${mode}`)}
+            </Button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">{t(`research.${webResearchMode}Description`)}</p>
+        <p className="text-xs text-muted-foreground">{t("research.privacy")}</p>
+      </section>
+
       {/* Endpoint Management */}
       <section className="rounded-lg bg-muted/60 p-4">
         <div className="flex items-center justify-between mb-3">

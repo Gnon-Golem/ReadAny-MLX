@@ -600,6 +600,10 @@
     }
   },
   "research": {
+    "sourceSaveFailed": "Could not save this source",
+    "sourceSaved": "Source saved at the cited passage",
+    "savingSource": "Saving…",
+    "saveSource": "Save to book notes",
     "cached": "Cached result",
     "provider": "Provider · {{name}}",
     "settingsTitle": "Web research",

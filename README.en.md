@@ -4,6 +4,12 @@
 
 An unofficial iOS fork of [ReadAny](https://github.com/codedogQBY/ReadAny) with on-device MLX embeddings and semantic retrieval on Apple Silicon iPad. This fork is based on ReadAny 1.3.7 source at upstream commit [`fce4468`](https://github.com/codedogQBY/ReadAny/commit/fce44689e1377df1ae99a35e8e71d5e8b3a639d1), which had no official 1.3.7 release at the time of this build.
 
+## Web research development branch
+
+`feat/unified-research` connects Parallel web search to the book assistant. Open **AI Settings → Web research** to choose Off, Auto, or Always. Off is the default. Hybrid answers can open verified book and web citations, and a web source can be saved at a cited EPUB passage. Build this branch locally to try it. The IPA link above still points to the earlier public 1.3.7 package.
+
+[Architecture, validation and limitations](docs/superpowers/specs/2026-11-21-unified-research-design.md)
+
 ## Features
 
 - MLX Swift, MLXEmbedders and Metal run Qwen3-Embedding-4B Q8 locally. The engine takes up to 1,024 tokens per input, including the final special token, and produces 2,560-dimensional L2-normalized vectors with last-token pooling.

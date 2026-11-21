@@ -17,11 +17,11 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     "created_at",
     "added_at",
   ],
-  highlights: ["id", "book_id", "text", "updated_at", "created_at"],
+  highlights: ["id", "book_id", "text", "cfi", "note", "updated_at", "created_at"],
   notes: ["id", "book_id", "content", "updated_at", "created_at"],
   bookmarks: ["id", "book_id", "label", "updated_at", "created_at"],
   threads: ["id", "title", "updated_at", "created_at"],
-  messages: ["id", "thread_id", "content", "created_at"],
+  messages: ["id", "thread_id", "content", "parts_order", "citations", "created_at"],
   tags: ["id", "name", "updated_at", "created_at"],
   book_tags: ["id", "book_id", "tag_id", "updated_at"],
   book_groups: ["id", "name", "updated_at", "created_at"],
@@ -107,7 +107,9 @@ class FakePerBookDb {
 
   private threadsOf(threadId: string): Row[] {
     return this.table("threads").size >= 0
-      ? [...this.table("threads")].filter(([, row]) => String(row.id) === threadId).map(([, r]) => r)
+      ? [...this.table("threads")]
+          .filter(([, row]) => String(row.id) === threadId)
+          .map(([, r]) => r)
       : [];
   }
 
@@ -177,7 +179,10 @@ class FakePerBookDb {
       const bookId = String(params[0]);
       return [...this.tombstones.values()]
         .filter(
-          (row) => row.book_id === bookId && row.table_name === table && !this.table(table).has(String(row.id)),
+          (row) =>
+            row.book_id === bookId &&
+            row.table_name === table &&
+            !this.table(table).has(String(row.id)),
         )
         .map((row) => ({ id: row.id, deleted_at: row.deleted_at })) as T[];
     }
@@ -318,7 +323,14 @@ class FakeBackend implements ISyncBackend {
 }
 
 function seedBook(db: FakePerBookDb, id: string, updatedAt: number, title = "Book"): void {
-  db.insert("books", { id, title, author: "", file_path: "", format: "epub", updated_at: updatedAt });
+  db.insert("books", {
+    id,
+    title,
+    author: "",
+    file_path: "",
+    format: "epub",
+    updated_at: updatedAt,
+  });
 }
 
 const T1 = 1_700_000_000_000;
@@ -492,6 +504,43 @@ describe("runPerBookSync (per-book cloud engine)", () => {
     expect(db.table("messages").get("msg-1")?.content).toBe("hello");
     expect(db.table("messages").get("msg-2")?.content).toBe("later");
     expect(db.syncMetadata.get("perbook:chat-pulled-day")).toBe("2026-09-05");
+  });
+
+  it("round-trips a research source and its concrete book position on the existing sync paths", async () => {
+    const url = "https://example.org/research";
+    const cfi = "epubcfi(/6/4!/4/2)";
+    const parts = JSON.stringify([
+      { type: "citation", cfi, bookId: "book-1", id: "book-1", citationIndex: 1 },
+      { type: "web_citation", id: "web-2", webSource: { url, title: "Paper", citationIndex: 2 } },
+    ]);
+    const note = `[Paper](<${url}>)\n\n<!-- readany-chat:th-1/msg-1 -->`;
+    seedBook(db, "book-1", T2);
+    db.insert("highlights", {
+      id: "source",
+      book_id: "book-1",
+      text: "Passage",
+      cfi,
+      note,
+      updated_at: T2,
+      created_at: T2,
+    });
+    db.insert("threads", { id: "th-1", title: "Research", updated_at: T2, created_at: T2 });
+    db.insert("messages", {
+      id: "msg-1",
+      thread_id: "th-1",
+      content: "[1] [2]",
+      parts_order: parts,
+      created_at: T2,
+    });
+    const backend = new FakeBackend();
+    expect((await runPerBookSync(backend)).success).toBe(true);
+    const second = new FakePerBookDb();
+    dbMocks.currentDb = second;
+    dbMocks.getDB.mockResolvedValue(second);
+    dbMocks.getDeviceId.mockResolvedValue("device-b");
+    expect((await runPerBookSync(backend)).success).toBe(true);
+    expect(second.table("messages").get("msg-1")?.parts_order).toBe(parts);
+    expect(second.table("highlights").get("source")).toMatchObject({ cfi, note });
   });
 
   it("skips a day under the cursor without reading its body when lastModified is not newer", async () => {

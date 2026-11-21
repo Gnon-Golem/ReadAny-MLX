@@ -32,6 +32,12 @@ Import the IPA into SideStore and sign it with your Apple ID. [Download and impo
 
 基于官方尚未以 Release 发布的 1.3.7 源码，基线为 [`fce4468`](https://github.com/codedogQBY/ReadAny/commit/fce44689e1377df1ae99a35e8e71d5e8b3a639d1)。[官方仓库](https://github.com/codedogQBY/ReadAny) · [上游英文说明](README.upstream.md) · [上游中文说明](README_CN.md)
 
+## 联网研究开发分支
+
+`feat/unified-research` 增加 Parallel 网页搜索，并将同一轮聊天的书籍和网页证据统一登记。进入「AI 设置 → 联网研究」可选择关闭、自动或强制，默认关闭。联合回答可打开书籍 CFI 或网页，并可将网页来源附到已引用的 EPUB 位置。此开发分支使用自己的本地构建。页面下载链接仍对应前述 1.3.7 公开包。
+
+[架构、验收与限制](docs/superpowers/specs/2026-11-21-unified-research-design.md)
+
 ## 功能
 
 - 使用 MLX Swift、MLXEmbedders 和 Metal GPU 运行 Qwen3-Embedding-4B MLX Q8。单条输入最多 1,024 token（含末尾特殊 token），取最后一个 token 的表示，输出经 L2 归一化的 2,560 维向量。

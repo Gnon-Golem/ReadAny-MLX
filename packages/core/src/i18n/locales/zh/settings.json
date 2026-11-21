@@ -600,6 +600,10 @@
     }
   },
   "research": {
+    "sourceSaveFailed": "无法保存此来源",
+    "sourceSaved": "来源已保存至书籍引用位置",
+    "savingSource": "正在保存…",
+    "saveSource": "存到书籍笔记",
     "cached": "使用缓存",
     "provider": "搜索服务商 · {{name}}",
     "settingsTitle": "联网研究",
