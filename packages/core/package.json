@@ -18,6 +18,7 @@
     "./utils/*": "./src/utils/*.ts",
     "./services": "./src/services/index.ts",
     "./ai": "./src/ai/index.ts",
+    "./ai/research": "./src/ai/research/index.ts",
     "./ai/*": "./src/ai/*.ts",
     "./ai/agents/*": "./src/ai/agents/*.ts",
     "./ai/skills": "./src/ai/skills/index.ts",

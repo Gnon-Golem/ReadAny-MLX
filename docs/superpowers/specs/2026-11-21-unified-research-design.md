@@ -8,13 +8,13 @@
 
 Core 的 `ai/agents/reading-agent.ts` 同时处理阅读范围、工具过滤和 ReAct。现有总上限 12，章节上限 8，定位上限 3，重复上限 2，通常递归上限 24。额度在缓存读取前扣减。 `ai/tools/index.ts` 根据索引状态注册 RAG 或 fallback； `context-tools.ts` 与 `reading-context-service.ts` 提供选区和章节。 `ai/streaming.ts` 转发取消和工具事件，桌面与共享 hook 都有调用点。
 
- Expo 的 `lib/platform/expo-platform-service.ts` 网络方法使用 XHR，适合既有 WebDAV 路径。研究将选用 Expo 54 的流式 fetch 注入 Core，单独检查重定向策略、AbortSignal、后台取消及恢复。Mac 使用标准流式 fetch。真实硬件目前不可用，Mac 与模拟器结果各自记录。
+Expo 的 `lib/platform/expo-platform-service.ts` 网络方法使用 XHR，适合既有 WebDAV 路径。研究将选用 Expo 54 的流式 fetch 注入 Core，单独检查重定向策略、AbortSignal、后台取消及恢复。Mac 使用标准流式 fetch。真实硬件目前不可用，Mac 与模拟器结果各自记录。
 
 ## 接入选择
 
 使用小型 Streamable HTTP 客户端，支持协商、初始化通知、工具发现、JSON 或 SSE、会话标头、响应限长与取消。只访问固定 Parallel 地址。保留可注入 fetch，使 Core 既能走标准实现，也能使用原生适配器。桌面 SDK 能复用更多协议，但在该基线的 Expo 分支会增加依赖与运行时兼容面。REST 适合作为有认证配置的备选。代理只有在公开 API 无法直连时再评估。
 
-网页读取由 Parallel 执行。客户端只接受公共 DNS 形式的 HTTPS URL，拒绝 IP、凭据、特殊端口和保留名称，不在应用中直接请求网页目标或跟随输出中的链接。MCP 传输拒绝重定向。Parallel 负责其服务端 DNS 解析和跳转。阶段三将进一步要求 fetch 目标来自本轮注册结果或用户明确提供的 URL。网页文本只作为不可信资料，不能扩大工具权限。联网默认关闭，搜索只提交有界查询，不附加书籍、选区、历史或凭据。
+网页读取由 Parallel 执行。客户端只接受公共 DNS 形式的 HTTPS URL，拒绝 IP、凭据、特殊端口和保留名称，不在应用中直接请求网页目标或跟随输出中的链接。MCP 传输拒绝重定向。Parallel 负责其服务端 DNS 解析和跳转。阶段三将进一步要求 fetch 目标来自本轮注册结果或用户明确提供的 URL。网页文本只作为不可信资料。联网回合仅绑定只读研究工具；修改书库或笔记必须走独立的用户操作。联网默认关闭，搜索只提交有界查询，不附加书籍、选区、历史或凭据。
 
 ## 阶段与文件入口
 
@@ -32,3 +32,9 @@ Core 的 `ai/agents/reading-agent.ts` 同时处理阅读范围、工具过滤和
 现有持久化对象是 `Message`。 `citations`、`tool_calls` 和 `parts_order` 都是 JSON 文本， `per-book-sync.ts` 同步消息行。因此在兼容测试前保持 schema，不为网页造假 bookId 或 CFI。保留旧书籍数组语义，评估以扩展渲染部件 JSON 保存简短网页元数据，使旧客户端忽略未知部件并保留既有聊天正文。严格核对旧客户端重写的行为。网页内容仅在内存，请求和完整响应不进入已同步 `tool_calls`。若需要 schema 迁移，先建立 SQLite 一致备份并复制用测试数据，在迁移前验证旧版本可打开及可恢复演练，然后才接触用户库。
 
 每阶段先跑目标用例，再跑已有 `pnpm test`、`pnpm lint`、Expo 测试和相关类型检查。比较基线 lint。公开网络验证只使用非私有问题和公共来源。设备验收前核实开发签名和现有数据，优先以独立探针运行 Phase 1。后续构建沿用 MLX 变体，若安装会覆盖设备上的稳定版本，先停下确认数据与恢复路径。
+
+## Phase 1 验证入口
+
+`packages/core/src/ai/research/parallel-provider.test.ts` 默认使用 Mock。设置 `READANY_TEST_LIVE_PARALLEL=1` 后运行同一测试文件，将额外执行一次匿名真实搜索和网页读取。程序仅查询公开的 Apple Metal 样例资料。
+
+常规 Expo 打包使用现有入口。在隔离测试构建时，设置 `EXPO_PUBLIC_PARALLEL_PROBE=1` 和单独的已授权测试 Bundle ID，再用原 MLX 变体流程构建。启动会对样例搜索和读取各执行一次，将结果写入探针容器内的 `Documents/parallel-probe-result.json`。界面也可单独搜索、读取或取消。关闭网络后再次运行，确认显示失败；恢复网络后再次运行，确认应用可重新建立 MCP 会话。进行中的请求进入后台时会取消。正常聊天阶段仍未启用网络工具。阶段后续将评估匿名服务的限流和会话关联标识。
