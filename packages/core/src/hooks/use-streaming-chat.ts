@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { maybeCompressThreadMemory } from "../ai/chat-memory";
+import type { ResearchOptions } from "../ai/research/research-planner";
 import { getBuiltinSkills } from "../ai/skills/builtin-skills";
 import { StreamingChat, createMessageId } from "../ai/streaming";
 import {
@@ -84,6 +85,7 @@ export interface StreamingChatOptions {
   book?: Book | null;
   semanticContext?: SemanticContext | null;
   bookId?: string;
+  research?: ResearchOptions;
 }
 
 export interface StreamingState {
@@ -360,6 +362,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
           aiConfig: aiConfigOverride || aiConfig,
           deepThinking,
           spoilerFree,
+          research: options?.research,
           getAvailableTools,
           onToken: (token) => {
             if (!currentTextPart) {

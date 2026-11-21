@@ -14,10 +14,11 @@ export function createWebTools(
           ok: false,
           code: error.code,
           message: error.message,
+          error: error.message,
           retryAfter: error.retryAfter,
         };
       }
-      return { ok: false, code: "unavailable", message: "Web research failed." };
+      return { ok: false, code: "unavailable", error: "Web research failed." };
     }
   }
 

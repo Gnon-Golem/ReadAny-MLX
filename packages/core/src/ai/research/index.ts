@@ -7,3 +7,4 @@ export type {
   WebSearchRequest,
   WebSource,
 } from "./web-provider";
+export type { ResearchOptions, ResearchSource, WebResearchMode } from "./research-planner";

@@ -7,6 +7,7 @@ import i18n from "i18next";
 import type { AIConfig, Book, SemanticContext, Skill, Thread } from "../types";
 import { streamReadingAgent } from "./agents/reading-agent";
 import { processMessages } from "./message-pipeline";
+import type { ResearchOptions } from "./research/research-planner";
 import { getToolResultError } from "./tool-result";
 import type { ToolDefinition } from "./tools/tool-types";
 
@@ -20,6 +21,7 @@ export interface StreamingOptions {
   aiConfig: AIConfig;
   deepThinking?: boolean;
   spoilerFree?: boolean;
+  research?: ResearchOptions;
   /** Injected tool provider */
   getAvailableTools: (options: {
     bookId: string | null;
@@ -110,6 +112,7 @@ export class StreamingChat {
           isVectorized: options.isVectorized,
           deepThinking: options.deepThinking,
           spoilerFree: options.spoilerFree,
+          research: options.research,
           memorySummary: options.thread.memorySummary,
           getAvailableTools: options.getAvailableTools,
           signal,
