@@ -60,3 +60,18 @@ export const BUILTIN_EMBEDDING_MODELS: BuiltinEmbeddingModel[] = [
     languagesKey: "settings.vm_lang_multi",
   },
 ];
+
+/** This checkpoint is supplied by the iPad MLX build and imported from Files. */
+export const QWEN3_MLX_MODEL: BuiltinEmbeddingModel = {
+  id: "qwen3-embedding-4b-mlx-q8",
+  hfModelId: "majentik/Qwen3-Embedding-4B-MLX-8bit",
+  name: "Qwen3-Embedding-4B Q8",
+  size: "~4 GB",
+  dimension: 2560,
+  descriptionKey: "settings.vm_model_desc_qwen3_mlx",
+  languagesKey: "settings.vm_lang_multi",
+};
+
+export function findBuiltinEmbeddingModel(id: string | null | undefined) {
+  return id === QWEN3_MLX_MODEL.id ? QWEN3_MLX_MODEL : BUILTIN_EMBEDDING_MODELS.find((model) => model.id === id);
+}

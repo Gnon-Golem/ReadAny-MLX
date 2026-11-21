@@ -1,383 +1,60 @@
-<p align="center">
-  <img src="packages/app/public/logo.svg" alt="ReadAny Logo" width="120" height="120">
-</p>
+# ReadAny-MLX
 
-<h1 align="center">ReadAny</h1>
+[ReadAny](https://github.com/codedogQBY/ReadAny) 的非官方 iOS 修改版，使用 Apple Silicon GPU 在设备上运行 MLX 向量模型。基于官方尚未以 Release 发布的 1.3.7 源码，基线为 [fce44689e1377df1ae99a35e8e71d5e8b3a639d1](https://github.com/codedogQBY/ReadAny/commit/fce44689e1377df1ae99a35e8e71d5e8b3a639d1)。[上游项目说明](README.upstream.md) · [上游中文说明](README_CN.md)
 
-<p align="center">
-  <strong>Local-first AI e-book reader for desktop and mobile</strong>
-</p>
+## 功能
 
-<p align="center">
-  <em>"Why do I forget what I read? Why are my notes scattered? Why can I only search by keywords?"</em>
-</p>
+- 使用 MLX Swift、MLXEmbedders 和 Metal GPU 运行 Qwen3-Embedding-4B MLX Q8。单条输入最多 1,024 token（含末尾特殊 token），取最后一个 token 的表示，输出经 L2 归一化的 2,560 维向量。
+- 书籍向量化和语义查询使用同一个本地模型，只有查询附加 Qwen3 检索指令。权重导入后，索引和向量检索可离线运行。完整聊天回答仍取决于配置的聊天模型。
+- 向量模型设置页支持导入、加载、卸载和删除模型。进入后台或收到内存警告时会释放模型，前台查询会按需重新加载。原有 ONNX 与远程 Embedding 入口保留。切换模型后，为需要查询的书建立对应模型的索引。
 
-<p align="center">
-  ReadAny helps you ask questions about books, find ideas by meaning, and build a private reading knowledge base with RAG chat, semantic search, highlights, TTS, and WebDAV sync.
-</p>
+## 构建与安装
 
-<p align="center">
-  <a href="https://github.com/codedogQBY/ReadAny/releases/latest">
-    <img src="https://img.shields.io/github/v/release/codedogQBY/ReadAny?color=blue&label=Download" alt="Release">
-  </a>
-  <a href="https://github.com/codedogQBY/ReadAny/stargazers">
-    <img src="https://img.shields.io/github/stars/codedogQBY/ReadAny?color=yellow" alt="Stars">
-  </a>
-  <a href="https://github.com/codedogQBY/ReadAny/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/codedogQBY/ReadAny?color=green" alt="License">
-  </a>
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-blue" alt="Platform">
-  <a href="README_CN.md">
-    <img src="https://img.shields.io/badge/lang-中文-red" alt="Chinese">
-  </a>
-</p>
+在 Apple Silicon Mac 上安装 Xcode 和 Metal Toolchain，以及 Node.js 22、pnpm 9.15.0、CocoaPods 和 CMake。Swift 依赖要求 Swift 工具链 6.2 或更新版本，构建目标最低为 iOS 17。原始验收使用 Xcode 27.2。
 
----
+从仓库根目录执行：
 
-> 🚀 **v2.0 Update**: Mobile apps (iOS/Android) now available! See [Mobile](#mobile-apps) section below.
-
-## AI-Native Reading Workflow
-
-- **Chat with your library** - Ask questions about the current book or selected passages, with answers grounded in your reading context
-- **Find ideas semantically** - Hybrid vector retrieval + BM25 search helps you find concepts even when the exact keyword is missing
-- **Keep knowledge private** - Local embeddings and a local vector store keep your books, highlights, and notes offline-capable
-- **Use your preferred model** - Connect OpenAI, Claude, Gemini, Ollama, DeepSeek, or custom-compatible providers
-
-## Why ReadAny?
-
-| Problem | Traditional Readers | ReadAny |
-|---------|---------------------|---------|
-| Search content | Keywords only | **Semantic search** that understands your intent |
-| Ask questions | Find answers yourself | **AI answers directly + locates sources** |
-| Take notes | Manual copy-paste | **Select to highlight**, one-click export |
-| Knowledge management | Scattered notes | **Unified management**, multi-format export |
-| Privacy | Upload to cloud | **Local vector store**, fully offline capable |
-
-### Comparison with Alternatives
-
-| Feature | ReadAny | Calibre | KOReader | Apple Books |
-|---------|---------|---------|----------|-------------|
-| AI Chat | ✅ | ❌ | ❌ | ❌ |
-| Semantic Search (RAG) | ✅ | ❌ | ❌ | ❌ |
-| Local Vector Store | ✅ | - | - | ❌ |
-| TTS (Text-to-Speech) | ✅ | ❌ | Limited | Limited |
-| Reading Stats | ✅ | ❌ | ❌ | Limited |
-| WebDAV Sync | ✅ | ❌ | ❌ | ❌ |
-| Skills System | ✅ | ❌ | ❌ | ❌ |
-| Format Support | 10+ | 15+ | 10+ | 2 |
-| Note Export | 5 formats | Limited | Limited | Limited |
-| Open Source | ✅ | ✅ | ✅ | ❌ |
-
----
-
-## Screenshots
-
-### Hero
-
-<div align="center">
-  <img src="assets/hero-screenshot.png" width="80%" alt="ReadAny Hero">
-</div>
-
-### AI-Powered Chat
-
-<div align="center">
-  <img src="assets/ai-chat-desktop.png" width="60%" alt="AI Chat - Desktop">
-  <img src="assets/ai-chat-mobile.png" width="20%" alt="AI Chat - Mobile">
-</div>
-
-### Notes & Highlights
-
-<div align="center">
-  <img src="assets/notes-desktop.png" width="60%" alt="Notes - Desktop">
-  <img src="assets/notes-mobile.png" width="20%" alt="Notes - Mobile">
-</div>
-
-### Text-to-Speech
-
-<div align="center">
-  <img src="assets/tts-desktop.png" width="60%" alt="TTS - Desktop">
-  <img src="assets/tts-mobile.png" width="20%" alt="TTS - Mobile">
-</div>
-
-### Reading Statistics
-
-<div align="center">
-  <img src="assets/stats-desktop.png" width="60%" alt="Stats - Desktop">
-  <img src="assets/stats-mobile.png" width="20%" alt="Stats - Mobile">
-</div>
-
-### Cross-Device Sync
-
-<div align="center">
-  <img src="assets/sync-desktop.png" width="60%" alt="Sync - Desktop">
-  <img src="assets/sync-mobile.png" width="20%" alt="Sync - Mobile">
-</div>
-
----
-
-## Core Features
-
-### 🤖 AI-Powered Reading
-
-- **Intelligent Chat** - Ask questions about your books, AI knows your position, selected text, and highlights
-- **Semantic Search** - Beyond keywords, vector retrieval + BM25 hybrid search
-- **Instant Translation** - AI translation or DeepL, 19 languages supported
-- **Multiple AI Providers** - OpenAI, Claude, Gemini, Ollama, DeepSeek
-- **Skills System** - Built-in skills (summarizer, concept explainer, character tracker, etc.) + create custom skills
-
-### 📝 Annotation & Knowledge Management
-
-- **5-Color Highlights** - Yellow/Green/Blue/Pink/Purple, hover to preview notes
-- **Markdown Notes** - Rich text editor with toolbar, WYSIWYG
-- **Multi-format Export** - Markdown, HTML, JSON, Obsidian, Notion
-
-### 🔊 Text-to-Speech (TTS)
-
-- **Multiple Engines** - Edge TTS, Browser TTS, DashScope (通义千问)
-- **Voice Selection** - 100+ voices in multiple languages
-- **Speed Control** - Adjustable playback speed
-- **Background Playback** - Listen while doing other things
-
-### 📊 Reading Statistics
-
-- **Reading Heatmap** - Visualize your reading habits like GitHub contributions
-- **Trend Charts** - Track daily/weekly/monthly reading time
-- **Streak Tracking** - Longest consecutive reading days
-- **Book Statistics** - Time spent per book, completion rate
-
-### ☁️ Cross-Device Sync
-
-- **WebDAV Support** - Sync your library, highlights, and notes across devices
-- **Auto Sync** - Automatic background synchronization
-- **Conflict Resolution** - Smart merge for concurrent edits
-
-### 📚 Multi-Format Support
-
-**EPUB** · **PDF** · **MOBI** · **AZW** · **AZW3** · **FB2** · **FBZ** · **CBZ** · **TXT** · **UMD**
-
-TXT and UMD are imported by converting them to EPUB for reading, notes, search, and sync.
-
-### 🎨 Customizable Experience
-
-- 5 font themes (CJK optimized)
-- Light/Dark mode
-- Paginated/Continuous scroll
-- Keyboard shortcuts
-- English/Chinese interface
-
----
-
-## Quick Start
-
-### Download
-
-| Platform | Download |
-|----------|----------|
-| macOS (Apple Silicon) | [Download .dmg](https://github.com/codedogQBY/ReadAny/releases/latest) |
-| macOS (Intel) | [Download .dmg](https://github.com/codedogQBY/ReadAny/releases/latest) |
-| Windows | [Download .msi](https://github.com/codedogQBY/ReadAny/releases/latest) |
-| Linux | [Download .AppImage](https://github.com/codedogQBY/ReadAny/releases/latest) |
-| iOS | [Join TestFlight](https://testflight.apple.com/join/qNdvNv2p) |
-| Android | [Download .apk](https://github.com/codedogQBY/ReadAny/releases/latest) |
-
-#### Homebrew (macOS)
-
-```bash
-brew tap codedogQBY/readany
-brew install --cask readany
+```sh
+pnpm install --frozen-lockfile
+export APP_VARIANT=mlx
+# 使用其他标识时，在 prebuild 和 pod install 期间保持相同值。
+# export READANY_MLX_BUNDLE_ID=com.example.readany.mlx
+cd packages/app-expo
+pnpm run build:reader
+pnpm exec expo prebuild --platform ios --no-install
+(cd ios && pod install)
+open ios/ReadAnyMLX.xcworkspace
 ```
 
-### 3 Steps to Get Started
+在 Xcode 中选择 `ReadAnyMLX` scheme、自己的 Development Team 和已配对、已启用开发者模式的 iPad。使用 Release 配置构建并运行。默认 Bundle ID 为 `com.readany.mlx.dev`。如遇标识已占用，可在生成工程前用上述变量指定自己的独立标识。复用已有的独立 MLX 安装时，使用相同 Team 和该安装的 Bundle ID。Xcode 的 DerivedData 应使用无空格路径，兼容静态阅读服务的 CMake 构建。
 
-1. **Import Books** - Drag and drop files into library
-2. **Start Reading** - Double-click to open, immersive experience
-3. **Configure AI** (Optional) - Settings → AI → Enter API Key
+签名后的应用与描述文件都应包含 `com.apple.developer.kernel.increased-memory-limit`。原始验收使用 Xcode Personal Team。SideStore 的免费账号重签可能丢掉这项授权，导入或续签后需检查新签名与进程内存额度。 [Apple 权限说明](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.kernel.increased-memory-limit) · [SideStore 已知问题](https://github.com/SideStore/SideStore/issues/1616)
 
-### Mobile Apps
+## 下载和使用模型
 
-ReadAny is now available on mobile devices!
+下载 [固定的 Hugging Face 快照](https://huggingface.co/majentik/Qwen3-Embedding-4B-MLX-8bit/tree/bf6643fd2d34f6832a1203c870564b1633183885)。将 `config.json`、`tokenizer.json`、`tokenizer_config.json` 和 `model.safetensors` 放在同一文件夹。权重约 4.27 GB，应用会校验该快照的文件哈希。导入期间需为本地副本预留空间。
 
-**Expo (React Native) Version:**
-```bash
-# Clone and setup
-git clone https://github.com/codedogQBY/ReadAny.git
-cd ReadAny
-pnpm install
+1. 将文件夹传到 iPad 的「文件」App。
+2. 在 ReadAny MLX 中进入「我的 → 向量模型 → 导入模型文件夹」。浏览进入模型文件夹，再点右上角「打开」。
+3. 点「加载并使用」，为书籍建立向量索引。
 
-# Install/run the development build on iOS
-pnpm expo:ios
+## 实测与兼容性
 
-# Install/run the development build on iOS Simulator
-pnpm expo:ios:simulator
+- MacBook Air M5 上，Swift 与 Python MLX 的 9 组 token ID 一致，最低向量余弦相似度为 0.99999432。
+- iPad Pro M5（12 GB，iPadOS 27.3）上的独立探针通过 256、512、1,024 token 推理和连续 100 条测试。ReadAny MLX 用新 EPUB 验证了断网索引、语义与混合检索、引用跳转、后台恢复以及旧 BGE ONNX 索引兼容性。该轮完整应用进程峰值约 4.44 GiB。
+- MLX 后端只在有 Metal 的实体 iPad 上启用。其他设备、系统版本、大书压力、联网聊天和同步尚无专项真机数据。可用进程内存不足时会中止模型加载或推理。以上数据来自原始设备验收。
 
-# Install/run the development build on Android
-# Start an Android emulator first, or connect a device.
-pnpm expo:android
+[Mac 与 iPad 验证工程](tools/qwen3-mlx-validation/README.md)
 
-# Start Metro for the installed development build
-pnpm expo:start
-```
+## 许可证
 
-Mobile development uses an Expo development build with `expo-dev-client`, not
-Expo Go. Expo Go cannot load ReadAny's native modules and app configuration. Use
-`pnpm expo:ios`, `pnpm expo:ios:simulator`, or `pnpm expo:android` the first
-time, or whenever native dependencies/configuration change, then use
-`pnpm expo:start` for daily JS debugging in the installed ReadAny development
-app.
+本 Fork 保留 [ReadAny 的 GPL-3.0 许可证文本](LICENSE)、上游版权声明与 Git 历史。ReadAny 项目元数据声明 GPL-3.0-or-later。
 
-For simulators, use `pnpm expo:ios:simulator` on iOS. For Android, start an
-Android emulator first, then run `pnpm expo:android`.
+| 新增依赖 | 固定版本 | 许可证 |
+| --- | --- | --- |
+| [MLX Swift](https://github.com/ml-explore/mlx-swift/blob/0.33.0/LICENSE) | 0.33.0 | MIT |
+| [MLX Swift LM / MLXEmbedders](https://github.com/ml-explore/mlx-swift-lm/blob/3.33.0/LICENSE) | 3.33.0 | MIT |
+| [swift-transformers](https://github.com/huggingface/swift-transformers/blob/1.4.0/LICENSE) | 1.4.0 | Apache-2.0 |
+| [Qwen3-Embedding-4B MLX Q8](https://huggingface.co/majentik/Qwen3-Embedding-4B-MLX-8bit) | `bf6643f` | Apache-2.0 |
 
-Mobile app source lives in [`packages/app-expo`](packages/app-expo).
-
-### AI Configuration
-
-| Provider | Get API Key |
-|----------|-------------|
-| OpenAI | [platform.openai.com](https://platform.openai.com/) |
-| Anthropic Claude | [console.anthropic.com](https://console.anthropic.com/) |
-| Google Gemini | [aistudio.google.com](https://aistudio.google.com/) |
-| Ollama / DeepSeek | Local or custom endpoint |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Desktop | [Tauri 2](https://tauri.app/) (Rust) |
-| Mobile | [Expo](https://expo.dev/) (React Native) + Tauri Mobile |
-| Frontend | [React 19](https://react.dev/) + TypeScript |
-| Build | [Vite 7](https://vite.dev/) |
-| Styling | [Tailwind CSS 4](https://tailwindcss.com/) + [Radix UI](https://www.radix-ui.com/) |
-| State | [Zustand](https://zustand.docs.pmnd.rs/) |
-| Database | SQLite |
-| E-Book | [foliate-js](https://github.com/johnfactotum/foliate-js) |
-| AI/LLM | [LangChain.js](https://js.langchain.com/) + [LangGraph](https://langchain-ai.github.io/langgraphjs/) |
-| Embeddings | [Transformers.js](https://huggingface.co/docs/transformers.js) |
-
----
-
-## Development
-
-```bash
-# Clone
-git clone https://github.com/codedogQBY/ReadAny.git
-cd ReadAny
-
-# Install
-pnpm install
-
-# Dev (Desktop)
-pnpm tauri dev
-
-# Dev (Mobile - Expo development build, not Expo Go)
-# First install/run the native development build:
-pnpm expo:ios
-pnpm expo:ios:simulator
-pnpm expo:android
-
-# Then start Metro for the installed development app:
-pnpm expo:start
-
-# Build
-pnpm tauri build
-```
-
-Mobile development uses `expo-dev-client`, so Expo Go is not supported. Re-run
-`pnpm expo:ios`, `pnpm expo:ios:simulator`, or `pnpm expo:android` after
-changing native dependencies, `app.config.js`, permissions, schemes, or build
-plugins.
-
-**Requirements:** Node.js ≥18, pnpm ≥9, Rust (for Tauri), plus Xcode for iOS or
-Android Studio/SDK for Android mobile development.
-
----
-
-## Roadmap
-
-- [x] **Mobile apps** — iOS and Android versions available
-- [x] **TTS (Text-to-Speech)** — Edge TTS, multiple voices
-- [x] **Reading Statistics** — Heatmap, trends, streaks
-- [x] **Skills System** — Built-in + custom AI skills
-- [x] **WebDAV Sync** — Cross-device synchronization
-- [ ] More AI models (Qwen, GLM, Llama)
-- [ ] PDF reflow/re-render
-- [ ] Plugin system
-- [ ] Cloud sync (official service)
-
----
-
-## Contributing
-
-Contributions welcome! Bug reports, feature requests, pull requests all appreciated.
-
-1. Fork → 2. Branch → 3. PR
-
-Please run `pnpm lint` before submitting to ensure code style consistency.
-
----
-
-## License
-
-[GPL-3.0](LICENSE) © 2024 ReadAny Team
-
-This project is open source under the GNU General Public License v3.0. You are free to use, modify, and distribute the code, but any derivative works must also be open source under the same license.
-
-**Note:** While the source code is freely available, the official app store versions may be offered for a fee to support ongoing development and cover certificate costs. You can always build the app yourself at no cost.
-
----
-
-## Acknowledgments
-
-- [foliate-js](https://github.com/johnfactotum/foliate-js) - E-book rendering engine
-- [Tauri](https://tauri.app/) - Cross-platform desktop framework
-- [Expo](https://expo.dev/) - React Native development platform
-- [LangChain.js](https://js.langchain.com/) - AI orchestration framework
-- [Radix UI](https://www.radix-ui.com/) - Accessible UI components
-- [Lucide](https://lucide.dev/) - Icon library
-
----
-
-## Community
-
-Thanks to [linux.do](https://linux.do/) — a vibrant Chinese tech community where you can learn about AI, development, and more.
-
----
-
-<p align="center">
-  Made with ❤️ by the ReadAny Team
-</p>
-
-<p align="center">
-  <a href="https://github.com/codedogQBY/ReadAny/discussions">💬 Discussions</a> •
-  <a href="https://github.com/codedogQBY/ReadAny/issues">🐛 Issues</a>
-</p>
-
-<p align="center">
-  <img src="assets/小红书群.jpg" width="200" alt="小红书群">
-  <img src="assets/微信群.jpg" width="200" alt="微信群">
-</p>
-
-## ☕ Support the Project
-
-If you find ReadAny helpful, consider buying me a coffee to support ongoing development!
-
-<p align="center">
-  <img src="assets/微信赞赏码.jpg" width="200" alt="微信赞赏码">
-  <img src="assets/支付宝收款码.jpg" width="200" alt="支付宝收款码">
-</p>
-
-<p align="center">
-  <a href="https://ifdian.net/a/codedogQBY">Dining Table on Afdian</a>
-</p>
-
----
-
-## Star History
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=codedogQBY/ReadAny&type=Date&theme=dark" />
-  <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=codedogQBY/ReadAny&type=Date" />
-  <img alt="Star History Chart" src="https://api.star-history.com/image?repos=codedogQBY/ReadAny&type=Date" />
-</picture>
+依赖通过 Swift Package Manager 获取，模型权重由用户从模型发布者下载。本 Fork 发布源码和验证工程。

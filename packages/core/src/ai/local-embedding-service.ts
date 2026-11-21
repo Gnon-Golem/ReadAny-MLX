@@ -2,7 +2,7 @@
  * Local Embedding Service
  * Supports interchangeable engines (WebWorker for Desktop, Native ONNX for Mobile).
  */
-import { BUILTIN_EMBEDDING_MODELS } from "./builtin-embedding-models";
+import { findBuiltinEmbeddingModel } from "./builtin-embedding-models";
 
 export interface ILocalEmbeddingEngine {
   init(): void | Promise<void>;
@@ -31,7 +31,7 @@ export async function loadEmbeddingPipeline(
   builtinModelId: string,
   onProgress?: (progress: number) => void,
 ): Promise<void> {
-  const model = BUILTIN_EMBEDDING_MODELS.find((m) => m.id === builtinModelId);
+  const model = findBuiltinEmbeddingModel(builtinModelId);
   if (!model) throw new Error(`Unknown built-in model: ${builtinModelId}`);
 
   if (currentModelId === builtinModelId) return;
@@ -57,7 +57,7 @@ export async function disposeEmbeddingPipeline(): Promise<void> {
 }
 
 export async function clearModelCache(builtinModelId: string): Promise<void> {
-  const model = BUILTIN_EMBEDDING_MODELS.find((m) => m.id === builtinModelId);
+  const model = findBuiltinEmbeddingModel(builtinModelId);
   if (!model) throw new Error(`Unknown built-in model: ${builtinModelId}`);
 
   if (currentModelId === builtinModelId) {

@@ -1,6 +1,7 @@
 const { getAppVariantConfig } = require("./scripts/app-variant");
 
 const variant = getAppVariantConfig();
+const mlx = variant.key === "mlx";
 
 module.exports = {
   expo: {
@@ -20,8 +21,10 @@ module.exports = {
       supportsTablet: true,
       bundleIdentifier: variant.bundleIdentifier,
       buildNumber: "2",
+      ...(mlx && { entitlements: { "com.apple.developer.kernel.increased-memory-limit": true } }),
       infoPlist: {
         UIBackgroundModes: ["audio"],
+        ...(mlx && { UIFileSharingEnabled: true, LSSupportsOpeningDocumentsInPlace: true }),
         NSCameraUsageDescription:
           "ReadAny uses the camera to scan sync and configuration QR codes.",
         NSLocalNetworkUsageDescription:
@@ -59,6 +62,7 @@ module.exports = {
       [
         "expo-build-properties",
         {
+          ...(mlx && { ios: { deploymentTarget: "17.0" } }),
           android: {
             enableProguardInReleaseBuilds: true,
             enableShrinkResourcesInReleaseBuilds: true,
@@ -67,6 +71,7 @@ module.exports = {
           },
         },
       ],
+      ...(mlx ? ["./plugins/withReadAnyMLX"] : []),
       "./plugins/withGradleMemory",
       "expo-font",
       [

@@ -11,23 +11,22 @@ import {
   useColors,
   withOpacity,
 } from "@/styles/theme";
-import { useNavigation } from "@react-navigation/native";
-import { BUILTIN_EMBEDDING_MODELS } from "@readany/core/ai/builtin-embedding-models";
-import { clearModelCache, loadEmbeddingPipeline } from "@readany/core/ai/local-embedding-service";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { BUILTIN_EMBEDDING_MODELS, QWEN3_MLX_MODEL } from "@readany/core/ai/builtin-embedding-models";
+import { clearModelCache, disposeEmbeddingPipeline, loadEmbeddingPipeline } from "@readany/core/ai/local-embedding-service";
 import { ensureNativeEmbeddingEngine } from "@/lib/rag/configure-search";
+import { mlxModule, type MLXModelStatus } from "@/lib/rag/native-mlx-embedding";
 import type { VectorModelConfig } from "@readany/core/types";
 import {
   EmbeddingEndpointTestError,
   normalizeEmbeddingEndpointUrl,
   testEmbeddingEndpoint,
 } from "@readany/core/utils/api";
-/**
- * VectorModelSettingsScreen — Mobile version only supports remote embedding APIs.
- * Local embedding is not supported to reduce APK size by ~100MB.
- */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Alert,
+  AppState,
   StyleSheet,
   Switch,
   Text,
@@ -193,7 +192,7 @@ function BuiltinModelsSection() {
     if (ready) { setSelectedBuiltinModelId(model.id); setVectorModelMode("builtin"); return; }
       updateBuiltinModelState(model.id, { status: "downloading", progress: 0, error: undefined });
       try {
-        await ensureNativeEmbeddingEngine();
+        ensureNativeEmbeddingEngine();
         await loadEmbeddingPipeline(model.id, (progress) => updateBuiltinModelState(model.id, { progress }));
       updateBuiltinModelState(model.id, { status: "ready", progress: 100 });
       setSelectedBuiltinModelId(model.id); setVectorModelMode("builtin");
@@ -222,6 +221,7 @@ function BuiltinModelsSection() {
         {state?.error ? <Text style={[s.testResult, s.testError]}>{state.error}</Text> : null}
       </View>
       <BuiltinEnglishModelCard />
+      <Qwen3MLXModelCard />
     </View>
   );
 }
@@ -249,7 +249,7 @@ function BuiltinEnglishModelCard() {
     }
     updateBuiltinModelState(model.id, { status: "downloading", progress: 0, error: undefined });
     try {
-      await ensureNativeEmbeddingEngine();
+      ensureNativeEmbeddingEngine();
       await loadEmbeddingPipeline(model.id, (progress) => updateBuiltinModelState(model.id, { progress }));
       updateBuiltinModelState(model.id, { status: "ready", progress: 100 });
       setSelectedBuiltinModelId(model.id);
@@ -288,6 +288,112 @@ function BuiltinEnglishModelCard() {
       </View>
       {ready && <TouchableOpacity style={s.clearBtn} disabled={clearing} onPress={clear}><Text style={s.clearBtnText}>{clearing ? "正在清理…" : "删除本地模型"}</Text></TouchableOpacity>}
       {state?.error ? <Text style={[s.testResult, s.testError]}>{state.error}</Text> : null}
+    </View>
+  );
+}
+
+function Qwen3MLXModelCard() {
+  const colors = useColors();
+  const s = makeStyles(colors);
+  const [status, setStatus] = useState<MLXModelStatus>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const selected = useVectorModelStore(
+    (state) => state.vectorModelMode === "builtin" && state.selectedBuiltinModelId === QWEN3_MLX_MODEL.id,
+  );
+
+  const refresh = useCallback(async () => {
+    if (mlxModule) setStatus(await mlxModule.status());
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    void refresh().catch(() => setStatus(undefined));
+  }, [refresh]));
+
+  useEffect(() => {
+    if (!mlxModule) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refresh().catch(() => setStatus(undefined));
+    });
+    return () => subscription.remove();
+  }, [refresh]);
+
+  if (!mlxModule || !status?.available) return null;
+  const native = mlxModule;
+
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await work();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      await refresh().catch(() => undefined);
+      setBusy(false);
+    }
+  };
+
+  const deselectIfCurrent = () => {
+    const state = useVectorModelStore.getState();
+    if (state.selectedBuiltinModelId === QWEN3_MLX_MODEL.id) state.setSelectedBuiltinModelId(null);
+  };
+
+  const select = () => run(async () => {
+    ensureNativeEmbeddingEngine();
+    // The model's resident state can change after a memory warning. Load the
+    // actual native model even if this ID is still selected in the JS cache.
+    await loadEmbeddingPipeline(QWEN3_MLX_MODEL.id);
+    if (!(await native.status()).loaded) await native.load();
+    const state = useVectorModelStore.getState();
+    state.setSelectedBuiltinModelId(QWEN3_MLX_MODEL.id);
+    state.setVectorModelMode("builtin");
+  });
+
+  return (
+    <View style={[s.modelCard, selected && s.modelCardActive]} testID="qwen3-model-card">
+      <View style={s.modelCardTop}>
+        <View style={s.modelInfo}>
+          <Text style={s.modelName}>{QWEN3_MLX_MODEL.name}</Text>
+          <Text style={s.modelSize}>2560 维 · MLX · 约 4 GB</Text>
+        </View>
+        {status.imported ? (
+          <TouchableOpacity style={s.downloadBtn} onPress={select} disabled={busy || (selected && status.loaded)}>
+            <Text style={s.downloadBtnText}>{selected && status.loaded ? "使用中" : "加载并使用"}</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={s.downloadBtn} disabled={busy} onPress={() => run(async () => {
+            await native.importModel();
+          })}>
+            <Text style={s.downloadBtnText}>导入模型文件夹</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      {status.imported && (status.loaded || selected) && (
+        <TouchableOpacity style={s.clearBtn} disabled={busy} onPress={() => run(async () => {
+          if (selected) await disposeEmbeddingPipeline();
+          else await native.unload();
+          deselectIfCurrent();
+        })}>
+          <Text style={s.clearBtnText}>卸载模型</Text>
+        </TouchableOpacity>
+      )}
+      {status.imported && (
+        <TouchableOpacity style={s.clearBtn} disabled={busy} onPress={() => {
+          Alert.alert("删除 Qwen3 模型", "会删除应用中的权重。现有书籍索引会保留。", [
+            { text: "取消", style: "cancel" },
+            { text: "删除", style: "destructive", onPress: () => run(async () => {
+              ensureNativeEmbeddingEngine();
+              await clearModelCache(QWEN3_MLX_MODEL.id);
+              deselectIfCurrent();
+            }) },
+          ]);
+        }}>
+          <Text style={s.clearBtnText}>删除本地模型</Text>
+        </TouchableOpacity>
+      )}
+      {busy && <Text style={s.modelSize}>正在处理…</Text>}
+      {error && <Text style={[s.testResult, s.testError]}>{error}</Text>}
     </View>
   );
 }

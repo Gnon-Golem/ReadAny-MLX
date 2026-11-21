@@ -1,3 +1,4 @@
+import { ensureNativeEmbeddingEngine } from "./configure-search";
 import { useLibraryStore } from "@/stores/library-store";
 import { useVectorModelStore } from "@/stores/vector-model-store";
 import { triggerVectorizeBook as coreTriggerVectorizeBook } from "@readany/core/rag";
@@ -32,6 +33,10 @@ export async function triggerVectorizeBook(
       };
     })(),
   };
+
+  if (config.vectorModelEnabled && config.vectorModelMode === "builtin" && config.selectedBuiltinModelId) {
+    ensureNativeEmbeddingEngine();
+  }
 
   // 2. Build callbacks for state updates
   const callbacks = {

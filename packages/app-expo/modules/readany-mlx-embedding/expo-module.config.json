@@ -1,0 +1,8 @@
+{
+  "platforms": ["apple"],
+  "apple": {
+    "modules": ["ReadAnyMLXEmbeddingModule"],
+    "podspecPath": "ios/ReadAnyMLXEmbedding.podspec",
+    "swiftModuleName": "ReadAnyMLXEmbedding"
+  }
+}

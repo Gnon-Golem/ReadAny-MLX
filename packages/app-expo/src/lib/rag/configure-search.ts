@@ -7,16 +7,15 @@ import {
 } from "@readany/core/rag";
 import { setLocalEmbeddingEngine } from "@readany/core/ai/local-embedding-service";
 import { useVectorModelStore } from "@/stores/vector-model-store";
+import { MobileEmbeddingEngine } from "./native-mlx-embedding";
 
 let nativeEmbeddingEngineLoaded = false;
 
-export async function ensureNativeEmbeddingEngine(): Promise<void> {
+export function ensureNativeEmbeddingEngine(): void {
   if (nativeEmbeddingEngineLoaded) return;
 
-  // Do not load the ONNX native module during ordinary app startup. Remote-only
-  // users should be able to start the app even if their device cannot load it.
-  const { NativeOnnxEmbeddingEngine } = await import("./native-onnx-embedding-engine");
-  setLocalEmbeddingEngine(new NativeOnnxEmbeddingEngine());
+  // The router loads the individual native engine on first use.
+  setLocalEmbeddingEngine(new MobileEmbeddingEngine());
   nativeEmbeddingEngineLoaded = true;
 }
 
@@ -38,7 +37,7 @@ export async function configureRagSearchFromVectorModelStore(): Promise<void> {
   }
 
   if (state.vectorModelMode === "builtin" && state.selectedBuiltinModelId) {
-    await ensureNativeEmbeddingEngine();
+    ensureNativeEmbeddingEngine();
     configureSearch(createBuiltinEmbeddingService(state.selectedBuiltinModelId));
     return;
   }

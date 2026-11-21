@@ -1,4 +1,4 @@
-import { BUILTIN_EMBEDDING_MODELS } from "../ai/builtin-embedding-models";
+import { findBuiltinEmbeddingModel } from "../ai/builtin-embedding-models";
 import { generateLocalEmbeddings, loadEmbeddingPipeline } from "../ai/local-embedding-service";
 import {
   deleteChunks,
@@ -269,7 +269,7 @@ function getEmbeddingProvenance(
   actualDimensions: number,
 ): EmbeddingProvenance {
   if (config.vectorModelMode === "builtin") {
-    const model = BUILTIN_EMBEDDING_MODELS.find((candidate) => candidate.id === config.selectedBuiltinModelId);
+    const model = findBuiltinEmbeddingModel(config.selectedBuiltinModelId);
     if (!model) throw new Error("Cannot save provenance for an unknown built-in embedding model.");
     return { kind: "builtin", modelId: model.id, dimensions: actualDimensions || model.dimension };
   }
@@ -294,7 +294,7 @@ async function generateBuiltinEmbeddings(
     throw new Error("No built-in model selected. Please select one in Settings → Vector Model.");
   }
 
-  const model = BUILTIN_EMBEDDING_MODELS.find((m) => m.id === builtinModelId);
+  const model = findBuiltinEmbeddingModel(builtinModelId);
   if (!model) throw new Error(`Unknown built-in model: ${builtinModelId}`);
 
   // Ensure the model is loaded in the Worker

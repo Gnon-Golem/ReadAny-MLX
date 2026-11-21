@@ -13,6 +13,13 @@ const APP_VARIANTS = {
     androidPackage: "com.readany.app.preview",
     scheme: "readany-preview",
   },
+  mlx: {
+    key: "mlx",
+    name: "ReadAny MLX",
+    bundleIdentifier: "com.readany.mlx.dev",
+    androidPackage: "com.readany.app.dev",
+    scheme: "readany-mlx",
+  },
   production: {
     key: "production",
     name: "ReadAny",
@@ -29,6 +36,7 @@ const VARIANT_ALIASES = {
   debug: "development",
   "development-simulator": "development",
   preview: "preview",
+  mlx: "mlx",
   staging: "preview",
   test: "preview",
   prod: "production",
@@ -63,7 +71,16 @@ function getAppVariant() {
 }
 
 function getAppVariantConfig() {
-  return APP_VARIANTS[getAppVariant()];
+  const variant = APP_VARIANTS[getAppVariant()];
+  const bundleIdentifier = process.env.READANY_MLX_BUNDLE_ID?.trim();
+  if (variant.key !== "mlx" || !bundleIdentifier) return variant;
+  const reserved = Object.values(APP_VARIANTS).some(
+    (candidate) => candidate.key !== "mlx" && candidate.bundleIdentifier === bundleIdentifier,
+  );
+  if (reserved || !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(bundleIdentifier)) {
+    throw new Error("READANY_MLX_BUNDLE_ID must be a valid, separate iOS bundle ID");
+  }
+  return { ...variant, bundleIdentifier };
 }
 
 module.exports = {

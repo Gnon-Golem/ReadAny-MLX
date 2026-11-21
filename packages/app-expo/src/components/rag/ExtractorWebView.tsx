@@ -40,7 +40,7 @@ interface PendingExtraction {
 export const ExtractorWebView = forwardRef<ExtractorRef>((_, ref) => {
   const webViewRef = useRef<WebView>(null);
   const [htmlUri, setHtmlUri] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const ready = useRef(false);
 
   // Pending extraction requests
   const pendingRequests = useRef<PendingExtraction[]>([]);
@@ -74,7 +74,7 @@ export const ExtractorWebView = forwardRef<ExtractorRef>((_, ref) => {
     try {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type === "ready") {
-        setReady(true);
+        ready.current = true;
       } else if (msg.type === "loaded") {
         // Trigger extraction once the book is fully loaded
         webViewRef.current?.injectJavaScript(`
@@ -113,7 +113,7 @@ export const ExtractorWebView = forwardRef<ExtractorRef>((_, ref) => {
   useImperativeHandle(ref, () => ({
     extractChapters: (base64BookData: string, mimeType = "application/epub+zip") => {
       return new Promise<ChapterData[]>((resolve, reject) => {
-        if (!ready || !webViewRef.current) {
+        if (!ready.current || !webViewRef.current) {
           return reject(new Error("Extractor WebView not ready"));
         }
 
@@ -140,7 +140,7 @@ export const ExtractorWebView = forwardRef<ExtractorRef>((_, ref) => {
         `);
       });
     },
-  }));
+  }), []);
 
   if (!htmlUri) return null;
 

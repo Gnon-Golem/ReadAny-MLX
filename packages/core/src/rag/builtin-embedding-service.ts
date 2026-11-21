@@ -1,13 +1,13 @@
 import { generateLocalEmbeddings, loadEmbeddingPipeline } from "../ai/local-embedding-service";
-import { BUILTIN_EMBEDDING_MODELS } from "../ai/builtin-embedding-models";
+import { findBuiltinEmbeddingModel, QWEN3_MLX_MODEL } from "../ai/builtin-embedding-models";
 import type { QueryEmbeddingService } from "./search";
 
 /**
  * Adapts the platform's configured builtin embedding engine to RAG query search.
- * Vectorization and query embedding therefore use the same Transformers.js pipeline.
+ * Vectorization and query embedding share the configured model and its index provenance.
  */
 export function createBuiltinEmbeddingService(builtinModelId: string): QueryEmbeddingService {
-  const model = BUILTIN_EMBEDDING_MODELS.find((candidate) => candidate.id === builtinModelId);
+  const model = findBuiltinEmbeddingModel(builtinModelId);
   if (!model) throw new Error(`Unknown built-in embedding model: ${builtinModelId}`);
 
   return {
@@ -18,7 +18,10 @@ export function createBuiltinEmbeddingService(builtinModelId: string): QueryEmbe
     },
     async embed(text: string): Promise<number[]> {
       await loadEmbeddingPipeline(builtinModelId);
-      const [embedding] = await generateLocalEmbeddings(builtinModelId, [text]);
+      const input = builtinModelId === QWEN3_MLX_MODEL.id
+        ? `Instruct: Given a question about a book, retrieve relevant passages that answer the question.\nQuery: ${text}`
+        : text;
+      const [embedding] = await generateLocalEmbeddings(builtinModelId, [input]);
       if (!embedding?.length) {
         throw new Error(`Built-in embedding model ${builtinModelId} returned no embedding.`);
       }
