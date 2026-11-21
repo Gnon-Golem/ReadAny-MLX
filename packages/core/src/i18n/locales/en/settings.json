@@ -600,6 +600,7 @@
     }
   },
   "research": {
+    "cached": "Cached result",
     "provider": "Provider · {{name}}",
     "settingsTitle": "Web research",
     "off": "Off",

@@ -10,3 +10,4 @@ export type {
 export type { ResearchOptions, ResearchSource, WebResearchMode } from "./research-planner";
 export { RESEARCH_TOOL_LIMITS } from "./tool-budget";
 export { MAX_CITATION_SOURCES } from "./evidence-registry";
+export { ResearchCache } from "./research-cache";

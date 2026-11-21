@@ -600,6 +600,7 @@
     }
   },
   "research": {
+    "cached": "使用缓存",
     "provider": "搜索服务商 · {{name}}",
     "settingsTitle": "联网研究",
     "off": "关闭",

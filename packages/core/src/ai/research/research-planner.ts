@@ -1,3 +1,4 @@
+import type { ResearchCache } from "./research-cache";
 import { type WebSearchProvider, publicWebUrl } from "./web-provider";
 
 export type WebResearchMode = "off" | "auto" | "always";
@@ -7,6 +8,7 @@ export interface ResearchOptions {
   mode: WebResearchMode;
   provider?: WebSearchProvider;
   createProvider?: () => WebSearchProvider;
+  cache?: ResearchCache;
 }
 
 const EXTERNAL =

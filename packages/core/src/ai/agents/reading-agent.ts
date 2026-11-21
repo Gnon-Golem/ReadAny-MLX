@@ -29,6 +29,7 @@ import {
   researchSource,
   type ResearchOptions,
 } from "../research/research-planner";
+import { ResearchEvidenceBudget, compactResearchHistory } from "../research/evidence-budget";
 import { EvidenceRegistry, registerToolEvidence } from "../research/evidence-registry";
 import { RESEARCH_TOOL_LIMITS, ResearchToolBudget } from "../research/tool-budget";
 import { buildSystemPrompt } from "../system-prompt";
@@ -934,8 +935,23 @@ export async function* streamReadingAgent(
     ].filter(Boolean);
     const provider =
       source === "local" ? undefined : (research?.provider ?? research?.createProvider?.());
-    const webTools = provider ? createScopedWebTools(provider, question, privateTexts, signal) : [];
+    const webTools = provider
+      ? createScopedWebTools(provider, question, privateTexts, signal, research?.cache)
+      : [];
     const evidence = webTools.length ? new EvidenceRegistry() : undefined;
+    const evidenceBudget = evidence ? new ResearchEvidenceBudget() : undefined;
+    const prepareResult = (name: string, result: unknown) => {
+      const packed = evidenceBudget?.pack(name, result) ?? result;
+      return evidence
+        ? registerToolEvidence(
+            evidence,
+            name,
+            packed,
+            effectiveBookId,
+            readingContextSnapshot?.bookId,
+          )
+        : packed;
+    };
     const tools =
       webTools.length === 0
         ? localTools
@@ -985,7 +1001,7 @@ export async function* streamReadingAgent(
       aiConfig.activeModel?.toLowerCase().includes("reasoner");
 
     const inputMessages: BaseMessage[] = [
-      ...history.map((h) => {
+      ...(evidence ? compactResearchHistory(history) : history).map((h) => {
         if (h.role === "user") {
           return new HumanMessage(h.content);
         }
@@ -1096,6 +1112,13 @@ export async function* streamReadingAgent(
             return JSON.stringify(toolResultCache.get(key));
           const pending = cacheable ? inFlight.get(key) : undefined;
           if (pending) return JSON.stringify(await pending);
+          const cached = tool.getCachedResult?.(toolInput);
+          if (cached !== undefined) {
+            const result = prepareResult(name, cached);
+            toolResultCache.set(key, result);
+            lastToolResults.set(key, result);
+            return JSON.stringify(result);
+          }
 
           const category =
             name === "webSearch" || name === "webFetch"
@@ -1144,18 +1167,7 @@ export async function* streamReadingAgent(
             tool,
             toolInput,
             getToolTimeoutMs(tool, toolTimeoutMs),
-          ).then((result) =>
-            evidence
-              ? registerToolEvidence(
-                  evidence,
-                  name,
-                  result,
-                  effectiveBookId,
-                  readingContextSnapshot?.bookId,
-                )
-              : result,
-          );
-
+          ).then((result) => prepareResult(name, result));
           if (cacheable) inFlight.set(key, execution);
           try {
             const result = await execution;

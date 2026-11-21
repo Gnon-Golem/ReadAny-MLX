@@ -211,7 +211,7 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
   const queryText = part.args.query ? String(part.args.query) : "";
   const webStatus =
     isWeb && part.result && typeof part.result === "object"
-      ? (part.result as { code?: string; count?: number })
+      ? (part.result as { code?: string; count?: number; cached?: boolean })
       : undefined;
   const errorMessage =
     (webStatus?.code === "rate_limited" ? t("research.rateLimited") : undefined) ||
@@ -234,6 +234,11 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
             <View style={s.errorBadge}>
               <Text style={s.errorBadgeText}>{t("streaming.toolFailed", "调用失败")}</Text>
             </View>
+          ) : null}
+          {webStatus?.cached && !hasError ? (
+            <Text style={s.queryText} numberOfLines={1}>
+              {t("research.cached")}
+            </Text>
           ) : null}
           {webStatus?.count === 0 && !hasError ? (
             <Text style={s.queryText} numberOfLines={1}>
