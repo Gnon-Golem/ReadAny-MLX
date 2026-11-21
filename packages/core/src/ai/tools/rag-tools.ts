@@ -172,6 +172,7 @@ export function createRagSearchTool(bookId: string): ToolDefinition {
         truncatedResults.push({
           chapter: r.chunk.chapterTitle,
           chapterIndex: r.chunk.chapterIndex,
+          chunkId: r.chunk.id,
           content,
           score: Math.round(r.score * 1000) / 1000,
           matchType: r.matchType,

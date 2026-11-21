@@ -142,6 +142,60 @@ describe("research with the real ReAct graph", () => {
     expect(search).toHaveBeenCalledTimes(1);
   });
 
+  it("emits numbered book and web citations exclusively from returned evidence IDs", async () => {
+    const bookSource = {
+      chapterTitle: "Metal",
+      chapterIndex: 0,
+      cfi: "epubcfi(/6/6!/4/2)",
+      content: "Book evidence.",
+    };
+    const tool = {
+      ...localTool,
+      execute: async () => ({ results: [bookSource] }),
+    };
+    const provider: WebSearchProvider = {
+      id: "mock",
+      search: vi.fn(async () => [SOURCE]),
+      fetchPage: vi.fn(),
+    };
+    const model = new ScriptedModel((messages) => {
+      if (!hasToolResult(messages)) {
+        return new AIMessage({
+          content: "",
+          tool_calls: [
+            call("fallbackSearch", { query: "Metal" }, "local"),
+            call("webSearch", { query: "Metal framework" }, "web"),
+          ],
+        });
+      }
+      const ids = messages
+        .filter((message) => message.getType() === "tool")
+        .flatMap((message) =>
+          [...String(message.content).matchAll(/"evidenceId":"([^"]+)"/g)].map((match) => match[1]),
+        );
+      return new AIMessage(`Sources ${ids.map((id) => `[[${id}]]`).join(" ")}. [[web-999]] [77]`);
+    });
+    const events = await run("比较书中理论和近期论文", { mode: "auto", provider }, model, [tool]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "citation",
+        citation: expect.objectContaining({ cfi: bookSource.cfi, bookId: "book-1" }),
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "web_citation",
+        citation: expect.objectContaining({ url: SOURCE.url, retrievalMethod: "search" }),
+      }),
+    );
+    const text = events
+      .filter((event) => event.type === "token")
+      .map((event) => event.content)
+      .join("");
+    expect(text).toContain("Sources [1] [2].");
+    expect(text).not.toMatch(/web-999|\[77\]/);
+  });
+
   it("guarantees an ordinary public Always request attempts the web and surfaces failures", async () => {
     const search = vi.fn(async () => {
       throw new WebResearchError("rate_limited", "Parallel rate limited the turn.");

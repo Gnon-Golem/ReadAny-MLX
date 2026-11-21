@@ -4,7 +4,7 @@ import i18n from "i18next";
  * Uses LangGraph reading agent for unified model support with tool calling.
  * Supports OpenAI-compatible, Anthropic Claude, and Google Gemini providers.
  */
-import type { AIConfig, Book, SemanticContext, Skill, Thread } from "../types";
+import type { AIConfig, Book, SemanticContext, Skill, Thread, WebCitationSource } from "../types";
 import { streamReadingAgent } from "./agents/reading-agent";
 import { processMessages } from "./message-pipeline";
 import type { ResearchOptions } from "./research/research-planner";
@@ -54,6 +54,7 @@ export interface StreamingOptions {
     content: string,
     type?: "thinking" | "planning" | "analyzing" | "deciding",
   ) => void;
+  onWebCitation?: (citation: WebCitationSource) => void;
   onCitation?: (citation: {
     id: string;
     bookId: string;
@@ -186,6 +187,10 @@ export class StreamingChat {
 
           case "citation":
             options.onCitation?.(event.citation);
+            break;
+
+          case "web_citation":
+            options.onWebCitation?.(event.citation);
             break;
 
           case "error":
