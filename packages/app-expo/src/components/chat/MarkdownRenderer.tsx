@@ -1,11 +1,13 @@
 import { MermaidView } from "@/components/common/MermaidView";
 import { fontSize as fs, radius, useColors } from "@/styles/theme";
 import type { ThemeColors } from "@/styles/theme";
+import { publicWebUrl } from "@readany/core/ai/research";
 import type { CitationPart } from "@readany/core/types/message";
+import { type ChatCitation, openWebCitation } from "./research-citations";
 import * as Clipboard from "expo-clipboard";
 import { Fragment, type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { StyleProp, TextStyle } from "react-native";
 import Markdown, { type RenderRules, type ASTNode } from "react-native-markdown-display";
 
@@ -13,7 +15,8 @@ interface MarkdownRendererProps {
   content: string;
   isStreaming?: boolean;
   styleOverrides?: Record<string, any>;
-  citations?: CitationPart[];
+  citations?: ChatCitation[];
+  verifiedWebOnly?: boolean;
   onCitationClick?: (citation: CitationPart) => void;
 }
 
@@ -99,13 +102,24 @@ function CitationLink({
   colors,
 }: {
   num: number;
-  citation: CitationPart;
+  citation: ChatCitation;
   onCitationClick?: (citation: CitationPart) => void;
   colors: ThemeColors;
 }) {
+  const { t } = useTranslation();
+  const isWeb = citation.type === "web_citation";
+  const title = isWeb ? citation.title : citation.chapterTitle;
   return (
     <TouchableOpacity
-      onPress={() => onCitationClick?.(citation)}
+      accessibilityRole="link"
+      accessibilityLabel={`${t(isWeb ? "research.webSource" : "research.bookSource")} ${num} ${title}`}
+      onPress={() => {
+        if (citation.type === "citation") {
+          onCitationClick?.(citation);
+        } else {
+          void openWebCitation(citation).catch(() => Alert.alert(t("research.cannotOpenSource")));
+        }
+      }}
       activeOpacity={0.7}
       style={{
         flexDirection: "row",
@@ -139,9 +153,10 @@ function CitationLink({
 
 function renderTextWithCitations(
   text: string,
-  citations: CitationPart[] | undefined,
+  citations: ChatCitation[] | undefined,
   onCitationClick: ((citation: CitationPart) => void) | undefined,
   colors: ThemeColors,
+  verifiedWebOnly: boolean,
 ): React.ReactNode[] {
   if (!citations || citations.length === 0) {
     return [<Fragment key="0">{text}</Fragment>];
@@ -157,7 +172,9 @@ function renderTextWithCitations(
     const match = part.match(/\[(\d+)\]/);
     if (match) {
       const num = Number.parseInt(match[1]);
-      const citation = citations.find((c) => c.citationIndex === num) ?? citations[num - 1];
+      const citation =
+        citations.find((c) => c.citationIndex === num) ??
+        (verifiedWebOnly ? undefined : citations[num - 1]);
       if (citation) {
         result.push(
           <CitationLink
@@ -185,6 +202,7 @@ export function MarkdownRenderer({
   styleOverrides,
   citations,
   onCitationClick,
+  verifiedWebOnly = false,
 }: MarkdownRendererProps) {
   const colors = useColors();
   const baseStyles = makeMarkdownStyles(colors);
@@ -216,13 +234,14 @@ export function MarkdownRenderer({
           <CodeBlockWithCopy key={node.key} code={code} style={style.code_block} colors={colors} />
         );
       },
+      ...(verifiedWebOnly ? { image: () => null } : {}),
       text: (node: ASTNode, children: ReactNode[], parentNodes: ASTNode[], style: any) => {
         const text = node.content || "";
         const readableStyle = [style, { color: getReadableTextColor(style, colors.foreground) }];
         if (citations && citations.length > 0 && /\[\d+\]/.test(text)) {
           return (
             <Text key={node.key} style={readableStyle}>
-              {renderTextWithCitations(text, citations, onCitationClick, colors)}
+              {renderTextWithCitations(text, citations, onCitationClick, colors, verifiedWebOnly)}
             </Text>
           );
         }
@@ -233,12 +252,29 @@ export function MarkdownRenderer({
         );
       },
     }),
-    [colors, citations, onCitationClick],
+    [colors, citations, onCitationClick, verifiedWebOnly],
   );
 
   return (
     <View>
-      <Markdown style={styles} rules={rules} mergeStyle>
+      <Markdown
+        style={styles}
+        rules={rules}
+        mergeStyle
+        onLinkPress={
+          verifiedWebOnly
+            ? (address) => {
+                const url = publicWebUrl(address);
+                return Boolean(
+                  url &&
+                    citations?.some(
+                      (source) => source.type === "web_citation" && source.url === url,
+                    ),
+                );
+              }
+            : undefined
+        }
+      >
         {content}
       </Markdown>
     </View>

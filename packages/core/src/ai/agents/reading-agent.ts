@@ -932,10 +932,9 @@ export async function* streamReadingAgent(
         .filter((line) => /^\s*>/u.test(line))
         .map((line) => line.replace(/^\s*>\s*/u, "")),
     ].filter(Boolean);
-    const webTools =
-      source !== "local" && research?.provider
-        ? createScopedWebTools(research.provider, question, privateTexts, signal)
-        : [];
+    const provider =
+      source === "local" ? undefined : (research?.provider ?? research?.createProvider?.());
+    const webTools = provider ? createScopedWebTools(provider, question, privateTexts, signal) : [];
     const evidence = webTools.length ? new EvidenceRegistry() : undefined;
     const tools =
       webTools.length === 0

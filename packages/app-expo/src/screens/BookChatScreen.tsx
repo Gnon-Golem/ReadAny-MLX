@@ -26,6 +26,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useStreamingChat } from "@/hooks";
+import { useExpoResearchOptions } from "@/hooks/use-expo-research-options";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
 import { resolveActiveAIConfig } from "@/lib/ai/resolve-active-ai-config";
 import { useLibraryStore } from "@/stores";
@@ -229,8 +230,9 @@ export function BookChatScreen({ route, navigation }: Props) {
   }, [backdropAnim, isTabletLandscape, sidebarAnim, sidebarWidth]);
 
   // Streaming chat
+  const research = useExpoResearchOptions();
   const { isStreaming, currentMessage, currentStep, error, sendMessage, stopStream } =
-    useStreamingChat({ book, bookId });
+    useStreamingChat({ book, bookId, research });
 
   const messagesV2: MessageV2[] = useMemo(() => {
     if (!activeThread) return [];

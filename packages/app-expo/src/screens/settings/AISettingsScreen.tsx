@@ -19,6 +19,7 @@ import { useColors } from "../../styles/theme";
 import { fontSize, fontWeight, spacing } from "../../styles/theme";
 import { SettingsHeader } from "./SettingsHeader";
 import { EndpointEditor } from "./ai/EndpointEditor";
+import { ResearchSettings } from "./ai/ResearchSettings";
 import { makeStyles } from "./ai/ai-settings-styles";
 
 export default function AISettingsScreen() {
@@ -158,6 +159,8 @@ export default function AISettingsScreen() {
             </View>
 
             {fetchError ? <Text style={styles.errorText}>{fetchError}</Text> : null}
+
+            <ResearchSettings />
 
             {/* Global Settings */}
             <View style={styles.sectionCard}>

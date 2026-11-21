@@ -598,5 +598,28 @@
         }
       }
     }
+  },
+  "research": {
+    "provider": "Provider · {{name}}",
+    "settingsTitle": "Web research",
+    "off": "Off",
+    "auto": "Auto",
+    "always": "Always",
+    "offDescription": "Use local research tools only.",
+    "autoDescription": "Search the web when the question calls for online or recent sources.",
+    "alwaysDescription": "Try web research for public questions. Book-related research stays local while spoiler protection is on.",
+    "privacy": "Parallel receives concise search terms or the public page address. Avoid including private information. The anonymous service may limit requests.",
+    "budget": "Tool budget · {{count}} per turn",
+    "budgetDetails": "Local {{local}} · Chapter {{chapter}} · Chapter lookup {{reference}}\nWeb search {{search}} · Page fetch {{fetch}} · Sources {{sources}}",
+    "sources": "Sources",
+    "webSource": "Web",
+    "bookSource": "Book",
+    "searchTool": "Search the web",
+    "fetchTool": "Read a web source",
+    "cannotOpenSource": "Could not open this source",
+    "rateLimited": "Parallel is rate limited. You can retry later.",
+    "cancelled": "Web research cancelled.",
+    "timeout": "Web research timed out.",
+    "noSources": "No sources returned"
   }
 }

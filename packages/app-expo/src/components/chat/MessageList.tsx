@@ -10,6 +10,7 @@ import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Alert,
   FlatList,
   Keyboard,
   Modal,
@@ -24,6 +25,7 @@ import {
   View,
 } from "react-native";
 import { PartRenderer } from "./PartRenderer";
+import { type ChatCitation, openWebCitation } from "./research-citations";
 import { StreamingIndicator } from "./StreamingIndicator";
 
 interface MessageListProps {
@@ -35,7 +37,7 @@ interface MessageListProps {
 
 const BOTTOM_THRESHOLD = 80;
 
-function sortCitationsByIndex(citations: CitationPart[]): CitationPart[] {
+function sortCitationsByIndex(citations: ChatCitation[]): ChatCitation[] {
   return citations
     .map((citation, order) => ({ citation, order }))
     .sort((a, b) => {
@@ -281,13 +283,24 @@ function MessageBubble({
   onLongPress,
 }: MessageBubbleProps) {
   const s = makeStyles(colors);
+  const { t } = useTranslation();
 
   // Extract citations from message parts
   const citations = useMemo(() => {
     return sortCitationsByIndex(
-      message.parts.filter((p): p is CitationPart => p.type === "citation"),
+      message.parts.filter(
+        (p): p is ChatCitation => p.type === "citation" || p.type === "web_citation",
+      ),
     );
   }, [message.parts]);
+
+  const webCitations = citations.filter((part) => part.type === "web_citation");
+  const verifiedWebOnly =
+    webCitations.length > 0 ||
+    message.parts.some(
+      (part) =>
+        part.type === "tool_call" && (part.name === "webSearch" || part.name === "webFetch"),
+    );
 
   const triggerLongPress = useCallback(() => {
     if (!onLongPress) return;
@@ -358,9 +371,33 @@ function MessageBubble({
             part={part}
             citations={citations}
             onCitationClick={onCitationClick}
+            verifiedWebOnly={verifiedWebOnly}
           />
         ))}
       </Pressable>
+      {webCitations.length > 0 && (
+        <View style={{ paddingVertical: 6, gap: 3 }}>
+          <Text style={{ color: colors.mutedForeground, fontSize: fs.xs }}>
+            {t("research.sources")}
+          </Text>
+          {webCitations.map((source) => (
+            <Pressable
+              key={source.id}
+              accessibilityRole="link"
+              onPress={() =>
+                void openWebCitation(source).catch(() =>
+                  Alert.alert(t("research.cannotOpenSource")),
+                )
+              }
+              style={{ minHeight: 44, justifyContent: "center" }}
+            >
+              <Text style={{ color: colors.primary, fontSize: fs.sm }} numberOfLines={2}>
+                [{source.citationIndex}] {t("research.webSource")} · {source.title}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       {showGapIndicator && <StreamingIndicator step="thinking" />}
       {!isStreaming && <CopyButton onPress={copyText} colors={colors} />}
     </View>
