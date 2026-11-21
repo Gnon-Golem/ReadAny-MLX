@@ -37,4 +37,4 @@ Expo 的 `lib/platform/expo-platform-service.ts` 网络方法使用 XHR，适合
 
 `packages/core/src/ai/research/parallel-provider.test.ts` 默认使用 Mock。设置 `READANY_TEST_LIVE_PARALLEL=1` 后运行同一测试文件，将额外执行一次匿名真实搜索和网页读取。程序仅查询公开的 Apple Metal 样例资料。
 
-常规 Expo 打包使用现有入口。在隔离测试构建时，设置 `EXPO_PUBLIC_PARALLEL_PROBE=1` 和单独的已授权测试 Bundle ID，再用原 MLX 变体流程构建。启动会对样例搜索和读取各执行一次，将结果写入探针容器内的 `Documents/parallel-probe-result.json`。界面也可单独搜索、读取或取消。关闭网络后再次运行，确认显示失败；恢复网络后再次运行，确认应用可重新建立 MCP 会话。进行中的请求进入后台时会取消。正常聊天阶段仍未启用网络工具。阶段后续将评估匿名服务的限流和会话关联标识。
+常规 Expo 打包使用现有入口。在隔离测试构建时，设置 `EXPO_PUBLIC_PARALLEL_PROBE=1` 和单独的已授权测试 Bundle ID，再用原 MLX 变体流程构建。启动会对样例搜索和读取各执行一次，将结果写入探针容器内的 `Documents/parallel-probe-result.json`。界面也可单独搜索、读取或取消。关闭网络后再次运行，确认显示失败；恢复网络后再次运行，确认应用可重新建立 MCP 会话。进行中的请求进入后台时会取消。正常聊天阶段仍未启用网络工具。iPad 首次遇到 429。复用同一 MCP 会话和匿名关联标识后，实机同一轮返回三条来源并读取了公开页面；其他网络仍可能限流。匿名服务失败时保留明确的错误分类。

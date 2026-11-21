@@ -60,6 +60,9 @@ export default function ParallelProbe() {
       );
     } catch (error) {
       result.error = errorStatus(error);
+      if (error instanceof WebResearchError && error.retryAfter) {
+        result.retryAfter = error.retryAfter;
+      }
       setStatus(errorStatus(error));
     } finally {
       result.durationMs = Date.now() - startedAt;

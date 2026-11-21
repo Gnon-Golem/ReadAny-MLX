@@ -14,7 +14,6 @@ const SOURCE = {
 
 function mockParallel(result: unknown, { sse = true, tools = ["web_search", "web_fetch"] } = {}) {
   return vi.fn<ParallelFetch>(async (_url, init) => {
-    if (init.method === "DELETE") return new Response(null, { status: 204 });
     const { method, id } = JSON.parse(init.body ?? "");
     if (method === "notifications/initialized") return new Response(null, { status: 202 });
     const data =
@@ -69,7 +68,7 @@ describe("Parallel provider", () => {
     });
     expect(sources[0]?.publishedAt).toBeUndefined();
     expect(sources[1]?.publishedAt).toBe("2025-11-21");
-    const posts = http.mock.calls.filter(([, init]) => init.method === "POST");
+    const posts = http.mock.calls;
     expect(posts.map(([, x]) => JSON.parse(x.body ?? "").method)).toEqual([
       "initialize",
       "notifications/initialized",
@@ -105,6 +104,48 @@ describe("Parallel provider", () => {
       urls: [URL],
       full_content: false,
     });
+  });
+
+  it("reuses discovered tools and Parallel's correlation across search and fetch", async () => {
+    const http = mockParallel({
+      structuredContent: { results: [SOURCE], session_id: "public-provider-correlation" },
+    });
+    const provider = new ParallelWebProvider(http);
+    await provider.search({ query: "Metal" });
+    await expect(provider.fetchPage(URL)).resolves.toMatchObject({ url: URL });
+
+    const posts = http.mock.calls.map(([, init]) => JSON.parse(init.body ?? ""));
+    expect(posts.map((post) => post.method)).toEqual([
+      "initialize",
+      "notifications/initialized",
+      "tools/list",
+      "tools/call",
+      "tools/call",
+    ]);
+    expect(posts[3]?.params.arguments).not.toHaveProperty("session_id");
+    expect(posts[4]?.params.arguments.session_id).toBe("public-provider-correlation");
+    expect(http.mock.calls[4]?.[1].headers["Mcp-Session-Id"]).toBe("test-session");
+  });
+
+  it("reinitializes once after the server expires a session", async () => {
+    const backend = mockParallel({ structuredContent: { results: [SOURCE] } });
+    let expired = false;
+    let calls = 0;
+    const http = vi.fn<ParallelFetch>(async (url, init) => {
+      const request = JSON.parse(init.body ?? "");
+      if (request.method === "tools/call" && ++calls === 2 && !expired) {
+        expired = true;
+        return new Response(null, { status: 404 });
+      }
+      return backend(url, init);
+    });
+    const provider = new ParallelWebProvider(http);
+    await provider.search({ query: "Metal" });
+    await expect(provider.fetchPage(URL)).resolves.toMatchObject({ url: URL });
+    expect(calls).toBe(3);
+    expect(
+      http.mock.calls.filter(([, init]) => JSON.parse(init.body ?? "").method === "initialize"),
+    ).toHaveLength(2);
   });
 
   it("ignores a fetch result substituted with a redirect destination", async () => {

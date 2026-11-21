@@ -1,4 +1,4 @@
-import { type ParallelFetch, callParallelTool, record } from "./parallel-transport";
+import { type ParallelFetch, createParallelTransport, record } from "./parallel-transport";
 import {
   type WebRequestOptions,
   WebResearchError,
@@ -74,15 +74,41 @@ function normalize(
 export class ParallelWebProvider implements WebSearchProvider {
   readonly id = "parallel";
 
-  constructor(private readonly http: ParallelFetch = (url, init) => fetch(url, init)) {}
+  private readonly transport;
+  private correlationId?: string;
+
+  /** One provider per research scope. Parallel associates web calls from this instance. */
+  constructor(http: ParallelFetch = (url, init) => fetch(url, init)) {
+    this.transport = createParallelTransport(http);
+  }
+
+  private async call(
+    name: "web_search" | "web_fetch",
+    args: Record<string, unknown>,
+    options?: WebRequestOptions,
+  ) {
+    const result = await this.transport(
+      name,
+      { ...args, ...(this.correlationId ? { session_id: this.correlationId } : {}) },
+      options,
+    );
+    const correlationId = record(result.structuredContent)?.session_id;
+    if (
+      typeof correlationId === "string" &&
+      correlationId.length > 0 &&
+      correlationId.length <= 1000
+    ) {
+      this.correlationId ??= correlationId;
+    }
+    return result;
+  }
 
   async search({ query, limit = 5 }: WebSearchRequest, options?: WebRequestOptions) {
     const normalized = query.trim().replace(/\s+/g, " ");
     if (!normalized || normalized.length > MAX_QUERY) {
       throw new WebResearchError("invalid_query", "Enter a concise query of up to 280 characters.");
     }
-    const result = await callParallelTool(
-      this.http,
+    const result = await this.call(
       "web_search",
       { objective: normalized, search_queries: [normalized] },
       options,
@@ -98,12 +124,7 @@ export class ParallelWebProvider implements WebSearchProvider {
     if (!allowed) {
       throw new WebResearchError("unsafe_url", "Only public HTTPS page addresses are supported.");
     }
-    const result = await callParallelTool(
-      this.http,
-      "web_fetch",
-      { urls: [allowed], full_content: false },
-      options,
-    );
+    const result = await this.call("web_fetch", { urls: [allowed], full_content: false }, options);
     // Preserve identity. Unexpected redirect destinations cannot become citations.
     return normalize(result, "fetch", MAX_RESULTS).find((source) => source.url === allowed);
   }

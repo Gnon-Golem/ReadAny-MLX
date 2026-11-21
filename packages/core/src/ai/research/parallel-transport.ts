@@ -9,7 +9,7 @@ const DEFAULT_TIMEOUT = 20_000;
 export type ParallelFetch = (
   url: string,
   init: {
-    method: "POST" | "DELETE";
+    method: "POST";
     headers: Record<string, string>;
     body?: string;
     signal: AbortSignal;
@@ -87,116 +87,145 @@ async function readMessage(response: Response, id: number): Promise<unknown> {
   }
 }
 
-export async function callParallelTool(
-  http: ParallelFetch,
-  name: ParallelTool,
-  args: Record<string, unknown>,
-  options: WebRequestOptions = {},
-): Promise<unknown> {
-  const controller = new AbortController();
-  const cancel = () => controller.abort();
-  if (options.signal?.aborted) {
-    throw new WebResearchError("cancelled", "Web research was cancelled.");
-  }
-  options.signal?.addEventListener("abort", cancel, { once: true });
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
-  const deadline = setTimeout(cancel, timeoutMs);
-  let session: string | undefined;
-  let version: string | undefined;
+const SESSION_REUSE_MS = 5 * 60_000;
+
+interface Session {
+  id?: string;
+  version?: string;
+  tools?: Set<ParallelTool>;
+  openedAt: number;
+}
+
+class ExpiredSession extends Error {}
+
+export function createParallelTransport(http: ParallelFetch) {
+  let current: Session | undefined;
   let id = 0;
 
-  const headers = () => ({
-    Accept: "application/json, text/event-stream",
-    "Content-Type": "application/json",
-    ...(session ? { "Mcp-Session-Id": session } : {}),
-    ...(version ? { "MCP-Protocol-Version": version } : {}),
-  });
+  return async (
+    name: ParallelTool,
+    args: Record<string, unknown>,
+    options: WebRequestOptions = {},
+  ): Promise<Record<string, unknown>> => {
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    if (options.signal?.aborted) {
+      throw new WebResearchError("cancelled", "Web research was cancelled.");
+    }
+    options.signal?.addEventListener("abort", cancel, { once: true });
+    const deadline = setTimeout(cancel, options.timeoutMs ?? DEFAULT_TIMEOUT);
 
-  async function post(method: string, params: Record<string, unknown> = {}, notification = false) {
-    const messageId = notification ? undefined : ++id;
-    const response = await http(ENDPOINT, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ jsonrpc: "2.0", id: messageId, method, params }),
-      signal: controller.signal,
-      credentials: "omit",
-      redirect: "error",
-    });
-    if (response.redirected) throw invalidResponse();
-    if (response.status === 429) {
-      void response.body?.cancel().catch(() => undefined);
-      throw new WebResearchError(
-        "rate_limited",
-        "Parallel is rate limited. Try again later.",
-        response.headers.get("retry-after") ?? undefined,
-      );
-    }
-    if (!response.ok) {
-      void response.body?.cancel().catch(() => undefined);
-      throw new WebResearchError(
-        "unavailable",
-        `Parallel request failed (HTTP ${response.status}).`,
-      );
-    }
-    if (messageId === undefined) {
-      void response.body?.cancel().catch(() => undefined);
-      if (response.status !== 202) throw invalidResponse();
-      return;
-    }
-    if (method === "initialize") session = response.headers.get("mcp-session-id") || undefined;
-    return readMessage(response, messageId);
-  }
+    const fresh = (): Session => ({ openedAt: Date.now() });
+    const reusable = current && Date.now() - current.openedAt < SESSION_REUSE_MS;
+    let session: Session = (reusable && current) || fresh();
 
-  try {
-    const initialized = record(
-      await post("initialize", {
-        protocolVersion: VERSION,
-        capabilities: {},
-        clientInfo: { name: "ReadAny MLX", version: "1.3.7" },
-      }),
-    );
-    const negotiated = initialized?.protocolVersion;
-    if (typeof negotiated !== "string" || !SUPPORTED_VERSIONS.includes(negotiated)) {
-      throw invalidResponse();
-    }
-    version = negotiated;
-    await post("notifications/initialized", {}, true);
-
-    // Check the actual allowlisted capability before sending search terms or URLs.
-    const tools = record(await post("tools/list"))?.tools;
-    if (!Array.isArray(tools) || !tools.some((tool) => record(tool)?.name === name)) {
-      throw invalidResponse();
-    }
-    const result = record(await post("tools/call", { name, arguments: args }));
-    if (!result) throw invalidResponse();
-    if (result.isError === true) {
-      throw new WebResearchError("unavailable", "Parallel could not complete this request.");
-    }
-    return result;
-  } catch (error) {
-    if (controller.signal.aborted) {
-      if (options.signal?.aborted)
-        throw new WebResearchError("cancelled", "Web research was cancelled.");
-      throw new WebResearchError("timeout", "Parallel did not respond in time.");
-    }
-    if (error instanceof WebResearchError) throw error;
-    throw new WebResearchError("unavailable", "Could not connect to Parallel.");
-  } finally {
-    clearTimeout(deadline);
-    options.signal?.removeEventListener("abort", cancel);
-    if (session && !controller.signal.aborted) {
-      const cleanup = new AbortController();
-      const timer = setTimeout(() => cleanup.abort(), 2000);
-      void http(ENDPOINT, {
-        method: "DELETE",
-        headers: headers(),
+    async function post(
+      method: string,
+      params: Record<string, unknown> = {},
+      notification = false,
+    ) {
+      const messageId = notification ? undefined : ++id;
+      const response = await http(ENDPOINT, {
+        method: "POST",
+        headers: {
+          Accept: "application/json, text/event-stream",
+          "Content-Type": "application/json",
+          ...(session.id ? { "Mcp-Session-Id": session.id } : {}),
+          ...(session.version ? { "MCP-Protocol-Version": session.version } : {}),
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: messageId, method, params }),
+        signal: controller.signal,
         credentials: "omit",
         redirect: "error",
-        signal: cleanup.signal,
-      })
-        .then((response) => response.body?.cancel())
-        .catch(() => undefined)
-        .finally(() => clearTimeout(timer));
+      });
+
+      if (response.redirected || !response.ok || notification) {
+        void response.body?.cancel().catch(() => undefined);
+      }
+      if (response.redirected) throw invalidResponse();
+      if (response.status === 404 && session.id && method === "tools/call") {
+        throw new ExpiredSession();
+      }
+      if (response.status === 429) {
+        throw new WebResearchError(
+          "rate_limited",
+          "Parallel is rate limited. Try again later.",
+          response.headers.get("retry-after") ?? undefined,
+        );
+      }
+      if (!response.ok) {
+        throw new WebResearchError(
+          "unavailable",
+          `Parallel request failed (HTTP ${response.status}).`,
+        );
+      }
+      if (messageId === undefined) {
+        if (response.status !== 202) throw invalidResponse();
+        return;
+      }
+      if (method === "initialize") session.id = response.headers.get("mcp-session-id") || undefined;
+      return readMessage(response, messageId);
     }
-  }
+
+    async function initialize() {
+      const initialized = record(
+        await post("initialize", {
+          protocolVersion: VERSION,
+          capabilities: {},
+          clientInfo: { name: "ReadAny MLX", version: "1.3.7" },
+        }),
+      );
+      const negotiated = initialized?.protocolVersion;
+      if (typeof negotiated !== "string" || !SUPPORTED_VERSIONS.includes(negotiated)) {
+        throw invalidResponse();
+      }
+      session.version = negotiated;
+      await post("notifications/initialized", {}, true);
+
+      // Discover the allowlisted capabilities before sending search terms or URLs.
+      const tools = record(await post("tools/list"))?.tools;
+      if (!Array.isArray(tools)) throw invalidResponse();
+      session.tools = new Set();
+      for (const tool of tools) {
+        const toolName = record(tool)?.name;
+        if (toolName === "web_search" || toolName === "web_fetch") session.tools.add(toolName);
+      }
+      current = session;
+    }
+
+    async function invoke() {
+      if (!session.tools?.has(name)) throw invalidResponse();
+      const result = record(await post("tools/call", { name, arguments: args }));
+      if (!result) throw invalidResponse();
+      if (result.isError === true) {
+        throw new WebResearchError("unavailable", "Parallel could not complete this request.");
+      }
+      return result;
+    }
+
+    try {
+      if (!session.tools) await initialize();
+      try {
+        return await invoke();
+      } catch (error) {
+        if (!(error instanceof ExpiredSession)) throw error;
+        if (current === session) current = undefined;
+        session = fresh();
+        await initialize();
+        return await invoke();
+      }
+    } catch (error) {
+      if (controller.signal.aborted) {
+        if (options.signal?.aborted) {
+          throw new WebResearchError("cancelled", "Web research was cancelled.");
+        }
+        throw new WebResearchError("timeout", "Parallel did not respond in time.");
+      }
+      if (error instanceof WebResearchError) throw error;
+      throw new WebResearchError("unavailable", "Could not connect to Parallel.");
+    } finally {
+      clearTimeout(deadline);
+      options.signal?.removeEventListener("abort", cancel);
+    }
+  };
 }
