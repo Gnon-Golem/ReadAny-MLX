@@ -176,8 +176,9 @@ describe("research with the real ReAct graph", () => {
     expect(search).not.toHaveBeenCalled();
   });
 
-  it("blocks verbatim passages from earlier user messages in an Auto search", async () => {
+  it("blocks attached quotes and book citations from earlier turns in an Auto search", async () => {
     const excerpt = "A distinctive paragraph copied from a private reading selection.";
+    const citation = "The underlying explanation comes from a separate private chapter.";
     const search = vi.fn(async () => [SOURCE]);
     const provider = { id: "mock", search, fetchPage: vi.fn() };
     const model = new ScriptedModel((messages) =>
@@ -185,7 +186,10 @@ describe("research with the real ReAct graph", () => {
         ? new AIMessage("The query was blocked.")
         : new AIMessage({
             content: "",
-            tool_calls: [call("webSearch", { query: excerpt }, "web")],
+            tool_calls: [
+              call("webSearch", { query: excerpt }, "selection"),
+              call("webSearch", { query: citation }, "citation"),
+            ],
           }),
     );
     const events = await run(
@@ -196,16 +200,20 @@ describe("research with the real ReAct graph", () => {
       "book-1",
       {
         isVectorized: false,
-        history: [{ role: "user", content: `> ${excerpt}\n\n解释这段。` }],
+        history: [
+          { role: "user", content: `> ${excerpt}\n\n解释这段。` },
+          { role: "assistant", content: `书中进一步说明。\n\n> [第二章]: "${citation}"` },
+        ],
       },
     );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "tool_result",
-        name: "webSearch",
-        result: expect.objectContaining({ code: "invalid_query" }),
-      }),
-    );
+    expect(
+      events.filter(
+        (event) =>
+          event.type === "tool_result" &&
+          event.name === "webSearch" &&
+          (event.result as { code?: string }).code === "invalid_query",
+      ),
+    ).toHaveLength(2);
     expect(search).not.toHaveBeenCalled();
   });
 

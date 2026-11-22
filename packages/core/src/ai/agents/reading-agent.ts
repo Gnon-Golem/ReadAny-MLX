@@ -941,10 +941,8 @@ export async function* streamReadingAgent(
     const privateTexts = provider
       ? [
           readingContextSnapshot?.selection?.text ?? "",
-          ...[
-            ...promptHistory.filter(({ role }) => role === "user").map(({ content }) => content),
-            userInput,
-          ]
+          // The message pipeline also injects book citations into past assistant turns.
+          ...[...promptHistory.map(({ content }) => content), userInput]
             .flatMap((content) => content.split(/\r?\n/))
             .filter((line) => /^\s*>/u.test(line))
             .map((line) => line.replace(/^\s*>\s*/u, "")),
