@@ -97,12 +97,13 @@ export class ResearchEvidenceBudget {
       const rows = Array.isArray(value.results) ? value.results : [];
       const results = this.select(rows, "book", ["content", "snippet"], 6);
       return {
+        searchMode: value.searchMode,
+        vectorStatus: value.vectorStatus,
+        vectorError: value.vectorError,
         results,
         totalResults: value.totalResults,
         returnedResults: results.length,
         instruction: value.instruction,
-        vectorStatus: value.vectorStatus,
-        vectorError: value.vectorError,
       };
     }
     if (name === "ragContext" || name === "fallbackChapterContext") {

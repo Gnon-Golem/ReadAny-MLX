@@ -19,7 +19,7 @@ vi.mock("../../db/database", () => ({
 }));
 
 vi.mock("../../rag/search", () => ({
-  search: vi.fn(),
+  searchWithDiagnostics: vi.fn(),
 }));
 
 vi.mock("../../rag/chunker", () => ({
@@ -60,7 +60,7 @@ import {
   updateGroup,
 } from "../../db/database";
 import { emitLibraryChanged } from "../../events/library-events";
-import { search } from "../../rag/search";
+import { searchWithDiagnostics } from "../../rag/search";
 import { loadFromFS } from "../../stores/persist";
 import { setFallbackContentProvider } from "../fallback-content-service";
 import { getAvailableTools } from "../tools";
@@ -436,7 +436,10 @@ describe("ragSearch tool", () => {
       matchType: "hybrid",
       highlights: [],
     }));
-    vi.mocked(search).mockResolvedValue(results as any);
+    vi.mocked(searchWithDiagnostics).mockResolvedValue({
+      results: results as any,
+      vectorStatus: "matched",
+    });
 
     const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
     const tool = findTool(tools, "ragSearch");
@@ -449,19 +452,20 @@ describe("ragSearch tool", () => {
   });
 
   it("should pass search parameters correctly", async () => {
-    vi.mocked(search).mockResolvedValue([]);
+    vi.mocked(searchWithDiagnostics).mockResolvedValue({ results: [], vectorStatus: "no_matches" });
 
     const tools = getAvailableTools({ bookId: "book-1", isVectorized: true, enabledSkills: [] });
     const tool = findTool(tools, "ragSearch");
-    await tool.execute({ query: "machine learning", mode: "vector", topK: 10 });
+    const result = await tool.execute({ query: "machine learning", mode: "vector", topK: 10 });
 
-    expect(search).toHaveBeenCalledWith({
+    expect(searchWithDiagnostics).toHaveBeenCalledWith({
       query: "machine learning",
       bookId: "book-1",
       mode: "vector",
       topK: 10,
       threshold: 0.3,
     });
+    expect(result).toMatchObject({ searchMode: "vector", vectorStatus: "no_matches" });
   });
 });
 

@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Chunk } from "../types";
 import { getChunks, getVectorIndexProvenance } from "../db/database";
-import { clearChunkCache, clearSearchConfiguration, configureSearch, search } from "./search";
+import type { Chunk } from "../types";
+import {
+  clearChunkCache,
+  clearSearchConfiguration,
+  configureSearch,
+  search,
+  searchWithDiagnostics,
+} from "./search";
 
 vi.mock("../db/database", () => ({
   getChunks: vi.fn(),
@@ -66,6 +72,42 @@ describe("RAG index provenance", () => {
       matchType: "bm25",
       vectorStatus: "unavailable",
       vectorError: expect.stringContaining("no embedding provenance"),
+    });
+  });
+
+  it("distinguishes a successful vector search below the cutoff from a vector failure", async () => {
+    const provenance = { kind: "builtin", modelId: "test-model", dimensions: 2 } as const;
+    vi.mocked(getVectorIndexProvenance).mockResolvedValue({
+      ...provenance,
+      bookId: "book-1",
+      createdAt: 1,
+    });
+    const embed = vi.fn().mockResolvedValueOnce([0.2, -0.1]).mockResolvedValueOnce([0.1, 0.2]);
+    configureSearch({ provenance, embed });
+    const query = {
+      query: "astronomy",
+      bookId: "book-1",
+      mode: "hybrid",
+      topK: 5,
+      threshold: 0.3,
+    } as const;
+    await expect(searchWithDiagnostics(query)).resolves.toMatchObject({
+      results: [{ matchType: "bm25" }],
+      vectorStatus: "no_matches",
+    });
+    await expect(searchWithDiagnostics(query)).resolves.toMatchObject({
+      results: [{ matchType: "hybrid" }],
+      vectorStatus: "matched",
+    });
+    expect(embed).toHaveBeenCalledTimes(2);
+    await expect(searchWithDiagnostics({ ...query, mode: "bm25" })).resolves.toMatchObject({
+      vectorStatus: "not_requested",
+    });
+
+    clearSearchConfiguration();
+    await expect(searchWithDiagnostics({ ...query, query: "nonexistent" })).resolves.toMatchObject({
+      results: [],
+      vectorStatus: "unavailable",
     });
   });
 

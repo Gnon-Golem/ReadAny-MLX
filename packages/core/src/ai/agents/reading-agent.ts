@@ -1006,7 +1006,7 @@ export async function* streamReadingAgent(
         : "";
     const autoInstructions =
       autoBookResearch && webTools.length
-        ? "\nUse the current question, recent conversation, and current book to choose sources. Resolve short follow-ups using the conversation. Use book tools for explanations or claims about the book, and use web tools when outside or current information is needed. For comparisons between the book and outside material, gather both kinds of evidence before answering. Skip web calls when book evidence or the conversation is enough."
+        ? "\nUse the current question, recent conversation, and current book to choose sources. Resolve short follow-ups using the conversation. Use book tools for explanations or claims about the book, and use web tools when outside or current information is needed. For comparisons, gather both kinds of evidence using separate queries. Search the book for its own concepts in its language. Put outside product names, dates, and benchmarks in the web query unless the user wants to check for those terms in the book. Skip web calls when book evidence or the conversation is enough. For ragSearch, vectorStatus=no_matches means vector search ran but no passage reached the similarity cutoff. Only vectorStatus=unavailable indicates a vector search error. If the book hits are irrelevant, try a distinct book-side concept when available or say what the book evidence does not establish."
         : "";
     const systemPrompt = basePrompt + researchInstructions + autoInstructions;
 

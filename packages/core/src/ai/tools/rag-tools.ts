@@ -3,7 +3,7 @@
  */
 import { getChunks } from "../../db/database";
 import { estimateTokens } from "../../rag/chunker";
-import { search } from "../../rag/search";
+import { searchWithDiagnostics } from "../../rag/search";
 import type { SearchQuery } from "../../types";
 import { resolveChapterReference } from "../chapter-reference-resolver";
 import { fallbackContentService } from "../fallback-content-service";
@@ -119,7 +119,7 @@ export function createRagSearchTool(bookId: string): ToolDefinition {
     parameters: {
       query: {
         type: "string",
-        description: "The search query describing what to find",
+        description: "The concept or passage to find in this book. Use the book's terminology.",
         required: true,
       },
       mode: {
@@ -138,7 +138,7 @@ export function createRagSearchTool(bookId: string): ToolDefinition {
         threshold: 0.3,
       };
 
-      const results = await search(query);
+      const { results, vectorStatus, vectorError } = await searchWithDiagnostics(query);
 
       // Smart truncation with token budget
       let totalTokens = 0;
@@ -183,17 +183,14 @@ export function createRagSearchTool(bookId: string): ToolDefinition {
       }
 
       return {
+        searchMode: query.mode,
+        vectorStatus,
+        ...(vectorError ? { vectorError } : {}),
         results: truncatedResults,
         totalResults: results.length,
         returnedResults: truncatedResults.length,
         totalTokens,
         tokenBudget: MAX_TOTAL_TOKENS,
-        ...(results[0]?.vectorStatus
-          ? {
-              vectorStatus: results[0].vectorStatus,
-              vectorError: results[0].vectorError,
-            }
-          : {}),
       };
     },
   };

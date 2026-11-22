@@ -62,9 +62,13 @@ describe("research model context", () => {
     }
     const local = budget.pack("ragSearch", {
       results: [{ chapterIndex: 0, cfi: "epubcfi(/6/4!/4)", content: "书籍原文段落", score: 0.7 }],
+      searchMode: "hybrid",
+      vectorStatus: "matched",
     });
     expect(local).toMatchObject({
       results: [{ score: 0.7, content: "书籍原文段落", cfi: "epubcfi(/6/4!/4)" }],
+      searchMode: "hybrid",
+      vectorStatus: "matched",
     });
     expect(
       compactResearchHistory([{ content: "研".repeat(10000) }, { content: "Recent short turn" }]),
