@@ -611,7 +611,7 @@
     "auto": "Auto",
     "always": "Always",
     "offDescription": "Use local research tools only.",
-    "autoDescription": "Search the web when the question calls for online or recent sources.",
+    "autoDescription": "In book chat, AI uses the question and conversation to choose book sources, web sources, or both. Other chats search the web as needed.",
     "alwaysDescription": "Try web research for public questions. Book-related research stays local while spoiler protection is on.",
     "privacy": "Parallel receives concise search terms or the public page address. Avoid including private information. The anonymous service may limit requests.",
     "budget": "Tool budget · {{count}} per turn",

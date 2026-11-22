@@ -429,6 +429,7 @@ function filterToolsForQuestion(options: {
   tools: ToolDefinition[];
   category: ReadingQuestionCategory;
   isVectorized: boolean;
+  keepBookTools: boolean;
 }): ToolDefinition[] {
   const focusedNames = getFocusedToolNames(options.category, options.isVectorized);
   if (focusedNames === null) {
@@ -438,7 +439,14 @@ function filterToolsForQuestion(options: {
     );
   }
 
-  const filtered = options.tools.filter((tool) => focusedNames.has(tool.name));
+  const filtered = options.tools.filter(
+    ({ name }) =>
+      focusedNames.has(name) ||
+      (options.keepBookTools &&
+        options.category !== "general_chat" &&
+        !GENERAL_TOOL_NAMES.has(name) &&
+        READ_ONLY_RESEARCH_TOOLS.has(name)),
+  );
   return sortToolsForCategory(filtered, options.category);
 }
 
@@ -904,12 +912,12 @@ export async function* streamReadingAgent(
     // Check abort after async operation
     if (isAborted()) return;
 
-    // Register tools via injected getAvailableTools, then narrow obvious chapter tasks.
+    const autoBookResearch = research?.mode === "auto" && Boolean(effectiveBookId);
     const question = publicQuestion(userInput);
     const source = researchSource(question, {
       mode: research?.mode ?? "off",
-      hasBook:
-        Boolean(effectiveBookId) || /书库|書庫|\b(?:library|across books)\b/iu.test(question),
+      hasBook: Boolean(effectiveBookId),
+      libraryReference: /书库|書庫|\b(?:library|across books)\b/iu.test(question),
       readingReference:
         questionCategory === "current_selection" ||
         questionCategory === "current_page_context" ||
@@ -925,16 +933,23 @@ export async function* streamReadingAgent(
       }),
       category: questionCategory,
       isVectorized,
+      keepBookTools: autoBookResearch,
     });
-    const privateTexts = [
-      readingContextSnapshot?.selection?.text ?? "",
-      ...userInput
-        .split(/\r?\n/)
-        .filter((line) => /^\s*>/u.test(line))
-        .map((line) => line.replace(/^\s*>\s*/u, "")),
-    ].filter(Boolean);
     const provider =
       source === "local" ? undefined : (research?.provider ?? research?.createProvider?.());
+    const promptHistory = provider ? compactResearchHistory(history) : history;
+    const privateTexts = provider
+      ? [
+          readingContextSnapshot?.selection?.text ?? "",
+          ...[
+            ...promptHistory.filter(({ role }) => role === "user").map(({ content }) => content),
+            userInput,
+          ]
+            .flatMap((content) => content.split(/\r?\n/))
+            .filter((line) => /^\s*>/u.test(line))
+            .map((line) => line.replace(/^\s*>\s*/u, "")),
+        ].filter(Boolean)
+      : [];
     const webTools = provider
       ? createScopedWebTools(provider, question, privateTexts, signal, research?.cache)
       : [];
@@ -977,9 +992,12 @@ export async function* streamReadingAgent(
       userLanguage: i18n.language || "en",
       spoilerFree,
       memorySummary,
-      questionCategory,
+      questionCategory: autoBookResearch && webTools.length ? undefined : questionCategory,
       selectionActive,
-      routeHint: buildRouteHint(questionCategory, selectionActive, isVectorized),
+      routeHint:
+        autoBookResearch && webTools.length
+          ? undefined
+          : buildRouteHint(questionCategory, selectionActive, isVectorized),
       allowedToolNames: tools.map((tool) => tool.name),
     });
 
@@ -988,7 +1006,11 @@ export async function* streamReadingAgent(
       : source !== "local"
         ? "\nWeb research is unavailable this turn. Do not claim a web search was completed."
         : "";
-    const systemPrompt = basePrompt + researchInstructions;
+    const autoInstructions =
+      autoBookResearch && webTools.length
+        ? "\nUse the current question, recent conversation, and current book to choose sources. Resolve short follow-ups using the conversation. Use book tools for explanations or claims about the book, and use web tools when outside or current information is needed. For comparisons between the book and outside material, gather both kinds of evidence before answering. Skip web calls when book evidence or the conversation is enough."
+        : "";
+    const systemPrompt = basePrompt + researchInstructions + autoInstructions;
 
     // Build input messages (history + user input, without system — handled by agent prompt)
     // For DeepSeek reasoner, we must include reasoning_content in assistant messages
@@ -1001,7 +1023,7 @@ export async function* streamReadingAgent(
       aiConfig.activeModel?.toLowerCase().includes("reasoner");
 
     const inputMessages: BaseMessage[] = [
-      ...(evidence ? compactResearchHistory(history) : history).map((h) => {
+      ...promptHistory.map((h) => {
         if (h.role === "user") {
           return new HumanMessage(h.content);
         }

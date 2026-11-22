@@ -611,7 +611,7 @@
     "auto": "自动",
     "always": "强制",
     "offDescription": "仅使用本地研究工具。",
-    "autoDescription": "问题需要网络或近期资料时自动联网。",
+    "autoDescription": "书籍聊天中，AI 根据问题和对话上下文决定查书、查网或两者结合。其他聊天按需联网。",
     "alwaysDescription": "对可公开的问题尝试联网。开启防剧透时，涉及书籍内容的研究仅使用本地资料。",
     "privacy": "Parallel 会收到简短搜索词或公开网页地址。请避免填写私人信息。匿名服务可能限流。",
     "budget": "工具额度 · 每轮 {{count}} 次",

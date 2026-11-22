@@ -7,15 +7,22 @@ import type { WebSource } from "./web-provider";
 const AUTO = { mode: "auto", hasBook: true, readingReference: false } as const;
 
 describe("research routing and privacy", () => {
-  it("separates reading scope from source selection", () => {
-    expect(researchSource("解释这一段", AUTO)).toBe("local");
+  it("makes both sources available in Auto book chat without requiring web keywords", () => {
+    expect(researchSource("解释这一段", AUTO)).toBe("hybrid");
+    expect(researchSource("接着查一下", AUTO)).toBe("hybrid");
     expect(researchSource("这段话对应的最新研究", AUTO)).toBe("hybrid");
-    expect(researchSource("2026 年最新研究", AUTO)).toBe("web");
+    expect(researchSource("2026 年最新研究", AUTO)).toBe("hybrid");
     expect(researchSource("比较书中理论和近期论文", AUTO)).toBe("hybrid");
+    expect(researchSource("2026 年最新研究", { ...AUTO, hasBook: false })).toBe("web");
+    expect(researchSource("给这些书分组", { ...AUTO, hasBook: false })).toBe("local");
+  });
+
+  it("still restricts networking in Off, private requests and spoiler-free book chat", () => {
     expect(researchSource("2026 年最新研究", { ...AUTO, mode: "off" })).toBe("local");
     expect(researchSource("你好！", { ...AUTO, mode: "always" })).toBe("local");
     expect(researchSource("谈谈 Metal", { ...AUTO, mode: "always" })).toBe("web");
     expect(researchSource("联网查这本书的结局", { ...AUTO, spoilerFree: true })).toBe("local");
+    expect(researchSource("接着查一下", { ...AUTO, spoilerFree: true })).toBe("local");
     expect(researchSource("联网搜索我的私人笔记", AUTO)).toBe("local");
   });
 

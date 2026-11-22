@@ -81,6 +81,9 @@ async function run(
   model: ScriptedModel,
   tools: ToolDefinition[] = [localTool],
   bookId: string | null = "book-1",
+  context: Pick<ReadingAgentOptions, "isVectorized" | "spoilerFree"> & {
+    history?: Parameters<typeof streamReadingAgent>[2];
+  } = { isVectorized: false },
 ) {
   vi.mocked(createChatModel).mockResolvedValue(model);
   const events = [];
@@ -90,12 +93,14 @@ async function run(
       book: null,
       bookId,
       enabledSkills: [],
-      isVectorized: false,
+      isVectorized: context.isVectorized,
+      spoilerFree: context.spoilerFree,
       semanticContext: null,
       getAvailableTools: () => tools,
       research,
     },
     question,
+    context.history,
   ))
     events.push(event);
   return events;
@@ -110,6 +115,100 @@ function call(name: string, args: Record<string, unknown>, id: string) {
 }
 
 describe("research with the real ReAct graph", () => {
+  it.each(["接着查一下", "再跟近期研究对照"])(
+    "lets Auto combine indexed and web evidence on the follow-up %s",
+    async (question) => {
+      const execute = vi.fn(async () => ({ results: ["Book evidence"] }));
+      const indexedTool = { ...localTool, name: "ragSearch", execute };
+      const search = vi.fn(async () => [SOURCE]);
+      const provider = { id: "mock", search, fetchPage: vi.fn() };
+      const earlierQuestion = "先找出书中对 GPU 任务调度的解释，再找外部资料对照。";
+      const model = new ScriptedModel((messages) => {
+        if (hasToolResult(messages)) return new AIMessage("Combined follow-up.");
+        if (!messages.some((message) => message.content === earlierQuestion)) {
+          return new AIMessage("Missing context.");
+        }
+        return new AIMessage({
+          content: "",
+          tool_calls: [
+            call("ragSearch", { query: "GPU 任务调度" }, "book"),
+            call("webSearch", { query: "GPU scheduling studies" }, "web"),
+          ],
+        });
+      });
+      const events = await run(
+        question,
+        { mode: "auto", provider },
+        model,
+        [indexedTool],
+        "book-1",
+        {
+          isVectorized: true,
+          history: [
+            { role: "user", content: earlierQuestion },
+            { role: "assistant", content: "书中的解释涉及任务延迟与吞吐量。" },
+          ],
+        },
+      );
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(search).toHaveBeenCalledTimes(1);
+      expect(events.some((event) => event.type === "error")).toBe(false);
+      expect(model.prompts).toHaveLength(2);
+    },
+  );
+
+  it("offers fallback search in Auto even when chapter routing would narrow it out", async () => {
+    const execute = vi.fn(localTool.execute);
+    const search = vi.fn(async () => [SOURCE]);
+    const provider = { id: "mock", search, fetchPage: vi.fn() };
+    const model = new ScriptedModel((messages) =>
+      hasToolResult(messages)
+        ? new AIMessage("Local answer.")
+        : new AIMessage({
+            content: "",
+            tool_calls: [call("fallbackSearch", { query: "Metal" }, "fallback")],
+          }),
+    );
+    await run("第三章对 Metal 的解释是什么？", { mode: "auto", provider }, model, [
+      { ...localTool, execute },
+    ]);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(search).not.toHaveBeenCalled();
+  });
+
+  it("blocks verbatim passages from earlier user messages in an Auto search", async () => {
+    const excerpt = "A distinctive paragraph copied from a private reading selection.";
+    const search = vi.fn(async () => [SOURCE]);
+    const provider = { id: "mock", search, fetchPage: vi.fn() };
+    const model = new ScriptedModel((messages) =>
+      hasToolResult(messages)
+        ? new AIMessage("The query was blocked.")
+        : new AIMessage({
+            content: "",
+            tool_calls: [call("webSearch", { query: excerpt }, "web")],
+          }),
+    );
+    const events = await run(
+      "接着查一下",
+      { mode: "auto", provider },
+      model,
+      [localTool],
+      "book-1",
+      {
+        isVectorized: false,
+        history: [{ role: "user", content: `> ${excerpt}\n\n解释这段。` }],
+      },
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool_result",
+        name: "webSearch",
+        result: expect.objectContaining({ code: "invalid_query" }),
+      }),
+    );
+    expect(search).not.toHaveBeenCalled();
+  });
+
   it("runs both fallback and web tools in one turn without persisting web excerpts", async () => {
     const search = vi.fn(async () => [SOURCE]);
     const provider: WebSearchProvider = { id: "mock", search, fetchPage: vi.fn() };
@@ -258,6 +357,32 @@ describe("research with the real ReAct graph", () => {
       expect(events.some((event) => event.type === "error")).toBe(false);
     }
     expect(search).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { mode: "off" as const, spoilerFree: false },
+    { mode: "auto" as const, spoilerFree: true },
+  ])("never creates the web provider with %j in book chat", async ({ mode, spoilerFree }) => {
+    const execute = vi.fn(localTool.execute);
+    const createProvider = vi.fn(() => ({ id: "mock", search: vi.fn(), fetchPage: vi.fn() }));
+    const model = new ScriptedModel((messages) =>
+      hasToolResult(messages)
+        ? new AIMessage("Local answer.")
+        : new AIMessage({
+            content: "",
+            tool_calls: [call("fallbackSearch", { query: "Metal" }, "book")],
+          }),
+    );
+    await run(
+      "接着查一下近期研究",
+      { mode, createProvider },
+      model,
+      [{ ...localTool, execute }],
+      "book-1",
+      { isVectorized: false, spoilerFree },
+    );
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(createProvider).not.toHaveBeenCalled();
   });
 
   it("executes at most 24 real parallel tools and reaches an unbound synthesis call", async () => {

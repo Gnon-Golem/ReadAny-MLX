@@ -34,26 +34,34 @@ export function researchSource(
   context: {
     mode: WebResearchMode;
     hasBook: boolean;
+    libraryReference?: boolean;
     readingReference: boolean;
     spoilerFree?: boolean;
   },
 ): ResearchSource {
   const question = publicQuestion(input);
+  const autoBookResearch = context.mode === "auto" && context.hasBook;
+  const hasLocalScope = context.hasBook || context.libraryReference;
   if (
     context.mode === "off" ||
     !/[\p{L}\p{N}]/u.test(question) ||
     CASUAL.test(question) ||
     PRIVATE.test(question) ||
     (context.spoilerFree &&
-      context.hasBook &&
-      (context.readingReference || READING.test(question) || PLOT.test(question)))
+      hasLocalScope &&
+      (autoBookResearch ||
+        context.readingReference ||
+        READING.test(question) ||
+        PLOT.test(question)))
   ) {
     return "local";
   }
+  // In book chat, "hybrid" exposes both sources. The agent decides which to use.
+  if (autoBookResearch) return "hybrid";
   if (context.mode === "auto" && !EXTERNAL.test(question) && !question.includes("https://")) {
     return "local";
   }
-  return context.hasBook && (context.readingReference || READING.test(question)) ? "hybrid" : "web";
+  return hasLocalScope && (context.readingReference || READING.test(question)) ? "hybrid" : "web";
 }
 
 export function publicSearchQuery(
