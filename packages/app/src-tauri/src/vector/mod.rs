@@ -240,14 +240,18 @@ impl VectorDB {
         book_id: &str,
         top_k: usize,
     ) -> Result<Vec<VectorSearchResult>> {
+        anyhow::ensure!(query.len() == self.dimension, "Vector query dimension mismatch");
         let query_bytes: Vec<u8> = query.iter().flat_map(|f| f.to_le_bytes()).collect();
 
+        // Scope ranking to the selected book. Core thresholds and RRF expect
+        // cosine similarity (higher is better), not vec0's default L2 distance.
         let mut stmt = self.conn.prepare(
-            "SELECT m.chunk_id, m.book_id, v.distance 
-             FROM vec_embeddings v
-             JOIN id_mapping m ON v.rowid = m.rowid
-             WHERE v.embedding MATCH ? AND m.book_id = ?
-             ORDER BY v.distance LIMIT ?",
+            "SELECT m.chunk_id, m.book_id,
+                    COALESCE(1.0 - vec_distance_cosine(v.embedding, ?1), 0.0) AS score
+             FROM id_mapping m
+             JOIN vec_embeddings v ON v.rowid = m.rowid
+             WHERE m.book_id = ?2
+             ORDER BY score DESC, m.rowid LIMIT ?3",
         )?;
 
         let results = stmt
@@ -270,18 +274,19 @@ impl VectorDB {
         }
         println!("[VectorDB] reinit: {} → {}", self.dimension, dimension);
 
-        self.conn.execute("DROP TABLE IF EXISTS vec_embeddings", [])?;
-        self.conn.execute("DELETE FROM id_mapping", [])?;
-
-        self.conn.execute(
-            &format!(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
-                    embedding float[{}]
-                )",
-                dimension
-            ),
+        let tx = self.conn.transaction()?;
+        let has_vectors: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM id_mapping) OR EXISTS(SELECT 1 FROM vec_embeddings)",
+            [],
+            |row| row.get(0),
+        )?;
+        anyhow::ensure!(!has_vectors, "Cannot change a non-empty vector index dimension");
+        tx.execute("DROP TABLE vec_embeddings", [])?;
+        tx.execute(
+            &format!("CREATE VIRTUAL TABLE vec_embeddings USING vec0(embedding float[{dimension}])"),
             [],
         )?;
+        tx.commit()?;
 
         self.dimension = dimension;
         println!("[VectorDB] reinit complete — new dimension: {}", dimension);
@@ -301,7 +306,44 @@ impl VectorDB {
 
 #[cfg(test)]
 mod tests {
-    use super::dimension_from_vec_schema;
+    use super::{dimension_from_vec_schema, VectorDB, VectorRecord};
+    use std::path::PathBuf;
+
+    #[test]
+    fn supports_2560_dimensions_and_refuses_to_reconfigure_a_nonempty_table() {
+        let mut db = VectorDB::new(&PathBuf::from(":memory:"), 384).unwrap();
+        db.reinit(2560).unwrap();
+        let mut query = vec![0.0; 2560];
+        query[0] = 1.0;
+        let mut unrelated = vec![0.0; 2560];
+        unrelated[1] = 1.0;
+        db.insert(&[
+            VectorRecord {
+                id: "unrelated".into(),
+                book_id: "book".into(),
+                embedding: unrelated,
+            },
+            VectorRecord {
+                id: "match".into(),
+                book_id: "book".into(),
+                embedding: query.clone(),
+            },
+            VectorRecord {
+                id: "other-book".into(),
+                book_id: "another".into(),
+                embedding: query.clone(),
+            },
+        ])
+        .unwrap();
+        assert!(db.reinit(384).is_err());
+        assert_eq!(db.get_stats().unwrap(), (3, 2560));
+        let results = db.search(&query, "book", 2).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].id, "match");
+        assert!((results[0].score - 1.0).abs() < 1e-5);
+        assert_eq!(results[1].id, "unrelated");
+        assert!(results[1].score.abs() < 1e-5);
+    }
 
     #[test]
     fn reads_dimension_from_existing_vec0_schema() {
