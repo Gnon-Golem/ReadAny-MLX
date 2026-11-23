@@ -23,6 +23,7 @@ import {
 import { setPlatformService } from "@readany/core/services";
 import { setTheme as setTauriTheme } from "@tauri-apps/api/app";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { startDesktopReadingMcp } from "./lib/agents/reading-mcp";
 import { shouldSuppressNativeContextMenu } from "./lib/environment";
 import { TauriPlatformService } from "./lib/platform/tauri-platform-service";
 import { DesktopEmbeddingEngine } from "./lib/rag/desktop-embedding";
@@ -163,9 +164,10 @@ i18nReady.then(() => {
   });
 
   // Initialize database and load books
-  desktopDataRootReady.then(() => {
-    useLibraryStore.getState().loadBooks();
-  });
+  desktopDataRootReady
+    .then(() => useLibraryStore.getState().loadBooks())
+    .then(startDesktopReadingMcp)
+    .catch((error) => console.error("[Reading MCP] Startup failed:", error));
 
   // Refresh library store when AI tools modify books/tags
   onLibraryChanged((deletedTags) => useLibraryStore.getState().loadBooks(deletedTags));

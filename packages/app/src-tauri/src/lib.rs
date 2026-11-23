@@ -1,6 +1,7 @@
 mod db;
 mod mlx;
 mod readany_cli;
+mod reading_mcp;
 mod storage;
 mod sync;
 mod transfer;
@@ -105,6 +106,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(mlx::MlxState::default())
+        .manage(reading_mcp::ReadingMcpState::default())
         .manage(VectorDBState {
             db: Mutex::new(None),
         })
@@ -128,6 +130,8 @@ pub fn run() {
             readany_cli::readany_cli_run,
             get_webview_version,
             mlx::mlx_embedding,
+            reading_mcp::readany_mcp_start,
+            reading_mcp::readany_mcp_reply,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -153,6 +157,11 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                reading_mcp::stop(app);
+            }
+        });
 }
