@@ -21,13 +21,8 @@ import {
   createSummarizeTool,
 } from "./analysis-tools";
 import { createAddCitationTool, createGetAnnotationsTool } from "./annotation-tools";
+import { createBookReadingTools } from "./book-reading-tools";
 import { getContextTools } from "./context-tools";
-import {
-  createFallbackChapterContextTool,
-  createFallbackResolveChapterReferenceTool,
-  createFallbackSearchTool,
-  createFallbackTocTool,
-} from "./fallback-content-tools";
 import {
   createClassifyBooksTool,
   createListBooksTool,
@@ -40,12 +35,6 @@ import {
   createUpdateBookMetadataTool,
 } from "./library-tools";
 import { createMindmapTool } from "./mindmap-tools";
-import {
-  createRagContextTool,
-  createRagSearchTool,
-  createRagTocTool,
-  createResolveChapterReferenceTool,
-} from "./rag-tools";
 import { createGetSkillsTool, skillToTool } from "./skill-tools";
 import type { ToolDefinition } from "./tool-types";
 
@@ -86,14 +75,14 @@ export function getAvailableTools(options: {
     tools.push(...getContextTools(options.bookId));
 
     // RAG tools (require vectorization)
-    if (options.isVectorized) {
-      tools.push(
-        createResolveChapterReferenceTool(options.bookId),
-        createRagSearchTool(options.bookId),
-        createRagTocTool(options.bookId),
-        createRagContextTool(options.bookId),
-      );
+    const reading = createBookReadingTools(options.bookId, options.isVectorized);
+    tools.push(
+      reading.resolveChapter,
+      ...(options.isVectorized ? [reading.search, reading.toc] : [reading.toc, reading.search]),
+      reading.chapter,
+    );
 
+    if (options.isVectorized) {
       // Content analysis tools (require chunks from vectorization)
       tools.push(
         createSummarizeTool(options.bookId),
@@ -101,13 +90,6 @@ export function getAvailableTools(options: {
         createAnalyzeArgumentsTool(options.bookId),
         createFindQuotesTool(options.bookId),
         createCompareSectionsTool(options.bookId),
-      );
-    } else {
-      tools.push(
-        createFallbackResolveChapterReferenceTool(options.bookId),
-        createFallbackTocTool(options.bookId),
-        createFallbackSearchTool(options.bookId),
-        createFallbackChapterContextTool(options.bookId),
       );
     }
 

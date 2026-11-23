@@ -43,3 +43,10 @@ export {
   type FallbackContentProvider,
   type FallbackTextSegment,
 } from "./fallback-content-service";
+
+export type {
+  AgentRuntime,
+  AgentRuntimeEvent,
+  AgentRuntimeOptions,
+  AgentRuntimeSession,
+} from "./agent-runtime";

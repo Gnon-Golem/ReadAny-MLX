@@ -26,6 +26,20 @@ export class EvidenceRegistry {
   private ids = new Map<string, string>();
   private citations = new Map<string, number>();
 
+  static restore(entries: readonly Evidence[]): EvidenceRegistry {
+    const registry = new EvidenceRegistry();
+    for (const evidence of entries) registry.register(evidence);
+    return registry;
+  }
+
+  snapshot(): Evidence[] {
+    return [...this.entries.values()];
+  }
+
+  get(id: string): Evidence | undefined {
+    return this.entries.get(id);
+  }
+
   register(evidence: Evidence): string {
     const key =
       evidence.type === "web"
