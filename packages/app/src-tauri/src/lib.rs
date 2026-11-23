@@ -1,4 +1,5 @@
 mod db;
+mod mlx;
 mod readany_cli;
 mod storage;
 mod sync;
@@ -98,12 +99,12 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .manage(mlx::MlxState::default())
         .manage(VectorDBState {
             db: Mutex::new(None),
         })
@@ -126,9 +127,13 @@ pub fn run() {
             vector::vector_shutdown,
             readany_cli::readany_cli_run,
             get_webview_version,
+            mlx::mlx_embedding,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
+            if !mlx::is_development_build(&app_handle) {
+                app_handle.plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             if let Some(window) = app.get_webview_window("main") {
                 if let Err(e) = window.set_decorations(false) {

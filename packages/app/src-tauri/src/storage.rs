@@ -26,6 +26,9 @@ pub fn default_data_root(app: &AppHandle) -> Result<PathBuf, String> {
 
 pub fn resolve_data_root(app: &AppHandle) -> Result<PathBuf, String> {
     let default_root = default_data_root(app)?;
+    if crate::mlx::is_development_build(app) {
+        return Ok(default_root);
+    }
     let config_path = default_root.join(DATA_ROOT_CONFIG_FILE);
 
     let Ok(raw) = std::fs::read_to_string(&config_path) else {

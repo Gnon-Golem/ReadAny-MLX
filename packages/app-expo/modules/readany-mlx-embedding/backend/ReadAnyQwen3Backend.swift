@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Metal
 import os
@@ -8,6 +7,9 @@ import ReadAnyMLXEmbedding
 
 @objc(ReadAnyQwen3Backend)
 final class ReadAnyQwen3Backend: NSObject, ReadAnyMLXEmbeddingBackend {
+    private static let modelFiles = Qwen3ModelFiles(
+        directory: URL.applicationSupportDirectory
+            .appendingPathComponent("ReadAnyModels/Qwen3Embedding4BMLXQ8", isDirectory: true))
     private var model: Qwen3Embedding?
     private var busy = false
     private var unloadAfterOperation = false
@@ -40,11 +42,11 @@ final class ReadAnyQwen3Backend: NSObject, ReadAnyMLXEmbeddingBackend {
     }
 
     func status() -> [String: Bool] {
-        ["available": Self.supported, "imported": ModelFiles.isImported, "loaded": model != nil]
+        ["available": Self.supported, "imported": Self.modelFiles.isImported, "loaded": model != nil]
     }
 
     func importFolder(_ url: URL, completion: @escaping (NSError?) -> Void) {
-        perform({ try await Task.detached(priority: .utility) { try ModelFiles.importFolder(url) }.value },
+        perform({ try await Task.detached(priority: .utility) { try Self.modelFiles.importFolder(url) }.value },
                 completion: completion)
     }
 
@@ -70,7 +72,7 @@ final class ReadAnyQwen3Backend: NSObject, ReadAnyMLXEmbeddingBackend {
     func deleteModel(completion: @escaping (NSError?) -> Void) {
         perform({
             self.release()
-            try ModelFiles.remove()
+            try Self.modelFiles.remove()
         }, completion: completion)
     }
 
@@ -106,11 +108,11 @@ final class ReadAnyQwen3Backend: NSObject, ReadAnyMLXEmbeddingBackend {
     @MainActor private func ensureLoaded() async throws {
         try requireForeground()
         if model != nil { return }
-        guard ModelFiles.isImported else { throw MLXModelError.modelMissing }
-        guard os_proc_available_memory() >= ModelFiles.weightBytes + 768 * 1024 * 1024 else {
+        guard Self.modelFiles.isImported else { throw MLXModelError.modelMissing }
+        guard os_proc_available_memory() >= Qwen3ModelFiles.weightBytes + 768 * 1024 * 1024 else {
             throw MLXModelError.insufficientMemory
         }
-        model = try await Qwen3Embedding.load(from: ModelFiles.directory)
+        model = try await Qwen3Embedding.load(from: Self.modelFiles.directory)
     }
 
     @MainActor private func requireForeground() throws {
@@ -125,96 +127,14 @@ final class ReadAnyQwen3Backend: NSObject, ReadAnyMLXEmbeddingBackend {
 }
 
 private enum MLXModelError: LocalizedError {
-    case busy, background, modelMissing, wrongSnapshot, insufficientMemory
+    case busy, background, modelMissing, insufficientMemory
 
     var errorDescription: String? {
         switch self {
         case .busy: "A Qwen3 operation is already running."
         case .background: "Return to ReadAny to run Qwen3 on the GPU."
         case .modelMissing: "Import the Qwen3 Q8 model folder before loading it."
-        case .wrongSnapshot: "The folder does not contain the verified majentik/Qwen3-Embedding-4B-MLX-8bit snapshot."
         case .insufficientMemory: "The iPad has insufficient memory available to run Qwen3."
         }
-    }
-}
-
-private enum ModelFiles {
-    static let weightBytes = 4_273_421_236
-    static let directory = URL.applicationSupportDirectory
-        .appendingPathComponent("ReadAnyModels/Qwen3Embedding4BMLXQ8", isDirectory: true)
-    // The embedding index identifies this exact model and tokenizer. Verify
-    // the copied bytes before publishing the folder under that identity.
-    private static let fingerprints = [
-        "config.json": "3a78fe960dd46951c52df2631fd8f01a91b9aa09dc7a2ae7b619266ea2d344f0",
-        "tokenizer.json": "31f82e8f8c173bff1b34626d065393d33938f6d27a7448cfb706bbf9d3c0e651",
-        "tokenizer_config.json": "579073f506a3f85caed232bb91617cfb93028408d1f43ffaf66f3fc1aee9a9af",
-        "model.safetensors": "40c34c3cb0df6dd2f9e954b32eaf44e4297fad2de9aa38655d2eb0a44fa62654",
-    ]
-
-    static var isImported: Bool {
-        let size = try? directory.appendingPathComponent("model.safetensors")
-            .resourceValues(forKeys: [.fileSizeKey]).fileSize
-        return size == weightBytes && fingerprints.keys.allSatisfy {
-            FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path)
-        }
-    }
-
-    static func remove() throws {
-        if FileManager.default.fileExists(atPath: directory.path) {
-            try FileManager.default.removeItem(at: directory)
-        }
-    }
-
-    static func importFolder(_ source: URL) throws {
-        if isImported { return }
-        let access = source.startAccessingSecurityScopedResource()
-        defer { if access { source.stopAccessingSecurityScopedResource() } }
-        let files = FileManager.default
-        let parent = directory.deletingLastPathComponent()
-        try files.createDirectory(at: parent, withIntermediateDirectories: true)
-        var staging = parent.appendingPathComponent("ImportingQwen3", isDirectory: true)
-        if files.fileExists(atPath: staging.path) { try files.removeItem(at: staging) }
-        try files.createDirectory(at: staging, withIntermediateDirectories: false)
-        defer { try? files.removeItem(at: staging) }
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try staging.setResourceValues(values)
-
-        let coordinator = NSFileCoordinator()
-        var coordinationError: NSError?
-        var copyError: Error?
-        coordinator.coordinate(readingItemAt: source, options: [], error: &coordinationError) { folder in
-            do {
-                for (filename, fingerprint) in fingerprints {
-                    let from = folder.appendingPathComponent(filename)
-                    let attrs = try from.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-                    guard attrs.isRegularFile == true, attrs.isSymbolicLink != true,
-                        filename != "model.safetensors" || attrs.fileSize == weightBytes
-                    else { throw MLXModelError.wrongSnapshot }
-                    let destination = staging.appendingPathComponent(filename)
-                    try files.copyItem(at: from, to: destination)
-                    guard try digest(destination) == fingerprint else { throw MLXModelError.wrongSnapshot }
-                }
-            } catch {
-                copyError = error
-            }
-        }
-        if let coordinationError { throw coordinationError }
-        if let copyError { throw copyError }
-        if files.fileExists(atPath: directory.path) {
-            _ = try files.replaceItemAt(directory, withItemAt: staging)
-        } else {
-            try files.moveItem(at: staging, to: directory)
-        }
-    }
-
-    private static func digest(_ file: URL) throws -> String {
-        let handle = try FileHandle(forReadingFrom: file)
-        defer { try? handle.close() }
-        var hash = SHA256()
-        while let block = try handle.read(upToCount: 4 * 1024 * 1024), !block.isEmpty {
-            hash.update(data: block)
-        }
-        return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }

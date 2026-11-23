@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ReadAny MLX Dev",
+  "identifier": "com.readany.mlx.macos.dev",
+  "build": {
+    "beforeDevCommand": "bash ../../scripts/build-macos-mlx.sh && pnpm dev --port 1430",
+    "devUrl": "http://localhost:1430",
+    "beforeBuildCommand": "bash ../../scripts/build-macos-mlx.sh && pnpm --filter @readany/cli build && pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ReadAny MLX Dev",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "hiddenTitle": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 12, "y": 18 },
+        "decorations": true
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["app"],
+    "createUpdaterArtifacts": false,
+    "resources": {
+      "../../cli/dist/": "readany-cli/",
+      "target/mlx-sidecar/": "mlx/"
+    },
+    "macOS": { "minimumSystemVersion": "14.0" }
+  },
+  "plugins": {
+    "updater": null
+  }
+}
