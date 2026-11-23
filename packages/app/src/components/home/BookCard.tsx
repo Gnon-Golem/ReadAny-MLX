@@ -1,3 +1,4 @@
+import { VectorTestDialog } from "@/components/rag/VectorTestDialog";
 import { GroupPickerPopover } from "@/components/home/GroupPickerPopover";
 import { ConfigGuideDialog, type ConfigGuideType } from "@/components/shared/ConfigGuideDialog";
 import {
@@ -32,6 +33,7 @@ import {
   Loader2,
   MoreVertical,
   Plus,
+  Search,
   Trash2,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -66,6 +68,7 @@ export const BookCard = memo(function BookCard({
   const addTag = useLibraryStore((s) => s.addTag);
   const hasVectorCapability = useVectorModelStore((s) => s.hasVectorCapability);
   const [showMenu, setShowMenu] = useState(false);
+  const [showVectorSearch, setShowVectorSearch] = useState(false);
   const [showTagMenu, setShowTagMenu] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [newTagInput, setNewTagInput] = useState("");
@@ -106,6 +109,7 @@ export const BookCard = memo(function BookCard({
     }
     if (
       showMenu ||
+      showVectorSearch ||
       showDeleteDialog ||
       showReindexConfirm ||
       Date.now() < suppressOpenUntilRef.current
@@ -336,6 +340,7 @@ export const BookCard = memo(function BookCard({
         <button
           ref={menuBtnRef}
           type="button"
+          aria-label={t("common.more", "More")}
           className="absolute right-1 bottom-1 z-20 rounded-md bg-black/30 p-0.5 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
           onClick={(e) => {
             e.stopPropagation();
@@ -353,6 +358,15 @@ export const BookCard = memo(function BookCard({
           <MoreVertical className="h-3.5 w-3.5 text-white" />
         </button>
       </div>
+
+      {showVectorSearch && (
+        <VectorTestDialog
+          bookId={book.id}
+          bookTitle={book.meta.title}
+          onClose={() => setShowVectorSearch(false)}
+          onOpenLocation={(initialCfi) => openDesktopBook({ book, t, initialCfi })}
+        />
+      )}
 
       {/* Context menu — fixed position to avoid any overflow clipping */}
       {showMenu && menuPos && (
@@ -416,6 +430,21 @@ export const BookCard = memo(function BookCard({
                 </>
               )}
             </button>
+            {book.isVectorized && book.syncStatus === "local" && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground hover:bg-muted"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowMenu(false);
+                  setMenuPos(null);
+                  setShowVectorSearch(true);
+                }}
+              >
+                <Search className="h-3.5 w-3.5" />
+                {t("vectorize.testSearch", "Search this book")}
+              </button>
+            )}
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground hover:bg-muted"

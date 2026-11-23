@@ -1,5 +1,7 @@
 {
   "vectorize": {
+    "testSearch": "檢索書籍",
+    "noMatches": "沒有符合的書籍片段。",
     "title": "向量測試",
     "chunks": "分塊",
     "vector": "向量",

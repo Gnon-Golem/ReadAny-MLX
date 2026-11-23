@@ -1,5 +1,7 @@
 {
   "vectorize": {
+    "testSearch": "Search this book",
+    "noMatches": "No matching passages.",
     "title": "Vector Test",
     "chunks": "Chunks",
     "vector": "Vector",
