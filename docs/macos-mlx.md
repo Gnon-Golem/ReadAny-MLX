@@ -62,6 +62,6 @@ open "packages/app/src-tauri/target/release/bundle/macos/ReadAny MLX Dev.app"
 
 macOS 侧实机验收范围为 M5 和短篇 EPUB。未复测商业 AI 账户、真实远程 Embedding 服务、大型书库压力或其他 Mac 硬件。应用包为本机开发签名，未公证。对同一本书的检索采用现有 sqlite-vec 的余弦计算，索引规模较大时需另做性能基准。
 
-## 后续 Agent 接口建议
+## 桌面 Codex
 
-在桌面平台服务边界定义外部 Agent 适配器。输入可包含会话 ID、用户文本、允许的书籍 ID、工具权限和取消信号。输出复用现有 `AgentStreamEvent` 的正文、状态、工具结果与引用事件，另行保存外部会话 ID。Codex App Server 与 Antigravity ACP 各实现一个传输适配器。书籍、网页和引用工具仍由本地 ReadAny 调度，继续使用共享工具预算与来源校验。适配器只收到获准的工具结果和必要上下文。
+Codex App Server 聊天的构建、单书授权和验收见 [桌面 Codex 聊天](codex-chat.md)。
