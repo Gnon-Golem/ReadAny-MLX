@@ -93,6 +93,7 @@
     "selectedCount": "{{count}} selected",
     "sort": "Sort",
     "syncNotConfigured": "Please configure sync first",
+    "bookActions": "Book actions",
     "detailsAction": "Book Details",
     "detailsTitle": "Book Details",
     "detailsDesc": "Edit the metadata ReadAny uses for library display, search, and sync naming.",

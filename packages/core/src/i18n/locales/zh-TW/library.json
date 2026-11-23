@@ -93,6 +93,7 @@
     "selectedCount": "已選 {{count}} 本",
     "sort": "排序",
     "syncNotConfigured": "請先設定同步",
+    "bookActions": "書籍操作",
     "detailsAction": "書籍詳情",
     "detailsTitle": "書籍詳情",
     "detailsDesc": "編輯 ReadAny 用於書架顯示、搜尋和同步命名的元資訊。",

@@ -340,7 +340,7 @@ export const BookCard = memo(function BookCard({
         <button
           ref={menuBtnRef}
           type="button"
-          aria-label={t("common.more", "More")}
+          aria-label={t("library.bookActions", "Book actions")}
           className="absolute right-1 bottom-1 z-20 rounded-md bg-black/30 p-0.5 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
           onClick={(e) => {
             e.stopPropagation();

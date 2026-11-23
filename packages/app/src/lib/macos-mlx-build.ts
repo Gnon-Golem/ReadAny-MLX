@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 let developmentBuild: Promise<boolean> | undefined;
 
 export function isMlxDevelopmentBuild(): Promise<boolean> {
-  return (developmentBuild ??= getIdentifier()
+  developmentBuild ??= getIdentifier()
     .then((identifier) => identifier === "com.readany.mlx.macos.dev")
-    .catch(() => false));
+    .catch(() => false);
+  return developmentBuild;
 }
 
 export function useMlxDevelopmentBuild(): boolean {
