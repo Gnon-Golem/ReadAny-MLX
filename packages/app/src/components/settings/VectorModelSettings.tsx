@@ -21,6 +21,7 @@ import { Check, Download, Edit2, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConfigTransfer } from "./ConfigTransfer";
+import { MlxModelSettings } from "./MlxModelSettings";
 
 /* ------------------------------------------------------------------ */
 /*  Built-in Models Section                                           */
@@ -97,6 +98,7 @@ function BuiltinModelsSection() {
       </div>
 
       <div className="space-y-2">
+        <MlxModelSettings />
         {BUILTIN_EMBEDDING_MODELS.map((model) => {
           const state = builtinModelStates[model.id];
           const isReady = state?.status === "ready";

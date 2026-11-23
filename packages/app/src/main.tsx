@@ -8,7 +8,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./styles/globals.css";
-import { setEmbeddingWorkerFactory, setStreamingFetch } from "@readany/core/ai";
+import { setStreamingFetch } from "@readany/core/ai";
+import { setLocalEmbeddingEngine } from "@readany/core/ai/local-embedding-service";
 import { onLibraryChanged } from "@readany/core/events/library-events";
 import { installFeedbackLogCapture, setFeedbackWorkerUrl } from "@readany/core/feedback";
 import {
@@ -24,6 +25,7 @@ import { setTheme as setTauriTheme } from "@tauri-apps/api/app";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { shouldSuppressNativeContextMenu } from "./lib/environment";
 import { TauriPlatformService } from "./lib/platform/tauri-platform-service";
+import { DesktopEmbeddingEngine } from "./lib/rag/desktop-embedding";
 import { registerDesktopFallbackContentProvider } from "./lib/rag/fallback-content-provider";
 import { syncLegacyDesktopLibraryRootConfig } from "./lib/storage/desktop-library-root";
 import { TauriVectorDB } from "./lib/tauri-vector-db";
@@ -73,10 +75,10 @@ setStreamingFetch(tauriFetch as typeof globalThis.fetch);
 // Register embedding worker factory for Vite/Tauri
 // Must use `new URL(...)` + explicit `{ type: "module" }` so that
 // import.meta.url is available inside the worker (needed by @huggingface/transformers / onnxruntime-web)
-setEmbeddingWorkerFactory(
+setLocalEmbeddingEngine(new DesktopEmbeddingEngine(
   () =>
     new Worker(new URL("@readany/core/ai/embedding-worker", import.meta.url), { type: "module" }),
-);
+));
 
 /**
  * The vectorization pipeline configures its embedding source independently from

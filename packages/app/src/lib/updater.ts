@@ -1,3 +1,4 @@
+import { isMlxDevelopmentBuild } from "@/lib/macos-mlx-build";
 import i18n from "@readany/core/i18n";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
@@ -55,6 +56,7 @@ function notifyListeners() {
 }
 
 export async function checkForUpdate(): Promise<UpdateInfo | null> {
+  if (await isMlxDevelopmentBuild()) return null;
   updateStatus = "checking";
   errorMessage = "";
   notifyListeners();
@@ -96,6 +98,7 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
 }
 
 export async function downloadAndInstall(): Promise<boolean> {
+  if (await isMlxDevelopmentBuild()) return false;
   const update = await check();
 
   if (!update) {

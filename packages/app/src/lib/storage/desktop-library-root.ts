@@ -1,3 +1,4 @@
+import { isMlxDevelopmentBuild } from "@/lib/macos-mlx-build";
 import { closeDB, getBooks, getDatabaseFilePath, initDatabase } from "@readany/core/db";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -141,6 +142,7 @@ export async function getDefaultDesktopLibraryRoot(): Promise<string> {
 }
 
 export async function syncLegacyDesktopLibraryRootConfig(): Promise<void> {
+  if (await isMlxDevelopmentBuild()) return;
   const legacyRoot = readLegacyStoredRoot();
   if (!legacyRoot) return;
 
@@ -151,12 +153,13 @@ export async function syncLegacyDesktopLibraryRootConfig(): Promise<void> {
 }
 
 export async function getDesktopLibraryRoot(): Promise<string> {
+  if (await isMlxDevelopmentBuild()) return getDefaultDesktopLibraryRoot();
   await syncLegacyDesktopLibraryRootConfig();
   return (await readConfiguredRoot()) ?? (await getDefaultDesktopLibraryRoot());
 }
 
 export async function setDesktopLibraryRoot(path: string | null): Promise<void> {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || await isMlxDevelopmentBuild()) return;
 
   const normalized = path ? normalizeDir(path) : "";
   const defaultRoot = await getDefaultDesktopLibraryRoot();
@@ -194,6 +197,9 @@ type MigrationResult = {
 export async function migrateDesktopLibraryRoot(nextRoot: string): Promise<MigrationResult> {
   const { copyFile, exists, remove } = await import("@tauri-apps/plugin-fs");
 
+  if (await isMlxDevelopmentBuild()) {
+    throw new Error("The MLX development build uses a fixed, isolated library directory.");
+  }
   const targetRoot = normalizeDir(nextRoot);
   if (!targetRoot) {
     throw new Error("Invalid target directory");

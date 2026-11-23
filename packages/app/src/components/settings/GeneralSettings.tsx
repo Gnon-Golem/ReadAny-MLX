@@ -1,3 +1,4 @@
+import { useMlxDevelopmentBuild } from "@/lib/macos-mlx-build";
 import {
   clearDesktopLibraryRoot,
   getDefaultDesktopLibraryRoot,
@@ -31,6 +32,7 @@ const THEME_CONFIG: Record<ThemeMode, { icon: typeof Sun; labelKey: string }> = 
 };
 
 export function GeneralSettings() {
+  const mlxDevelopmentBuild = useMlxDevelopmentBuild();
   const { t, i18n } = useTranslation();
   const [theme, setThemeState] = useState<ThemeMode>("dark");
   const [currentLibraryRoot, setCurrentLibraryRoot] = useState("");
@@ -248,7 +250,7 @@ export function GeneralSettings() {
               {t("settings.storageLocation")}
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              {t("settings.storageLocationDesc")}
+              {t(mlxDevelopmentBuild ? "settings.storageMlxLocationDesc" : "settings.storageLocationDesc")}
             </p>
           </div>
         </div>
@@ -261,42 +263,46 @@ export function GeneralSettings() {
             <Input value={currentLibraryRoot} readOnly />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              {t("settings.storageTargetPath")}
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={targetLibraryRoot}
-                onChange={(e) => setTargetLibraryRoot(e.target.value)}
-                placeholder={t("settings.storageTargetPath")}
-              />
-              <Button variant="outline" onClick={handleChooseLibraryFolder} disabled={migratingLibrary}>
-                <FolderOpen className="h-4 w-4" />
-                {t("settings.storageChooseFolder")}
-              </Button>
-            </div>
-          </div>
+          {!mlxDevelopmentBuild && (
+            <>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {t("settings.storageTargetPath")}
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={targetLibraryRoot}
+                    onChange={(e) => setTargetLibraryRoot(e.target.value)}
+                    placeholder={t("settings.storageTargetPath")}
+                  />
+                  <Button variant="outline" onClick={handleChooseLibraryFolder} disabled={migratingLibrary}>
+                    <FolderOpen className="h-4 w-4" />
+                    {t("settings.storageChooseFolder")}
+                  </Button>
+                </div>
+              </div>
 
-          <div className="rounded-md border border-border/60 bg-background/80 p-3">
-            <p className="text-xs leading-5 text-muted-foreground">
-              {t("settings.storageMigrationNote")}
-            </p>
-          </div>
+              <div className="rounded-md border border-border/60 bg-background/80 p-3">
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {t("settings.storageMigrationNote")}
+                </p>
+              </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handleMigrateLibrary} disabled={migratingLibrary}>
-              {migratingLibrary ? t("settings.storageMigrating") : t("settings.storageMigrate")}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleResetLibrary}
-              disabled={migratingLibrary || currentLibraryRoot === defaultLibraryRoot}
-            >
-              <RotateCcw className="h-4 w-4" />
-              {t("settings.storageResetDefault")}
-            </Button>
-          </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleMigrateLibrary} disabled={migratingLibrary}>
+                  {migratingLibrary ? t("settings.storageMigrating") : t("settings.storageMigrate")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleResetLibrary}
+                  disabled={migratingLibrary || currentLibraryRoot === defaultLibraryRoot}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  {t("settings.storageResetDefault")}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </section>
     </div>

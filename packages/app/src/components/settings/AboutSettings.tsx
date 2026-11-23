@@ -1,3 +1,4 @@
+import { useMlxDevelopmentBuild } from "@/lib/macos-mlx-build";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,6 +64,7 @@ const TECH_STACK: TechStackItem[] = [
 type DialogType = "none" | "updateAvailable" | "upToDate" | "error";
 
 export function AboutSettings() {
+  const mlxDevelopmentBuild = useMlxDevelopmentBuild();
   const { t } = useTranslation();
   const [status, setStatus] = useState(getUpdateStatus());
   const [update, setUpdate] = useState(getAvailableUpdate());
@@ -199,15 +201,17 @@ export function AboutSettings() {
             >
               {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
             </button>
-            <button
-              type="button"
-              onClick={handleCheckUpdate}
-              disabled={status === "checking" || status === "downloading"}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-              title={t("settings.checkUpdate")}
-            >
-              <RefreshCw className={`h-4 w-4 ${status === "checking" ? "animate-spin" : ""}`} />
-            </button>
+            {!mlxDevelopmentBuild && (
+              <button
+                type="button"
+                onClick={handleCheckUpdate}
+                disabled={status === "checking" || status === "downloading"}
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                title={t("settings.checkUpdate")}
+              >
+                <RefreshCw className={`h-4 w-4 ${status === "checking" ? "animate-spin" : ""}`} />
+              </button>
+            )}
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between">
