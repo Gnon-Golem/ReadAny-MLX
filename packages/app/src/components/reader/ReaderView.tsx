@@ -406,7 +406,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const TOOLBAR_PIN_STORAGE_KEY = "readany-reader-toolbar-pinned";
   const readerTab = useReaderStore((s) => s.tabs[tabId]);
   const removeReaderTab = useReaderStore((s) => s.removeTab);
-  const appTab = useAppStore((s) => s.tabs.find((t) => t.id === tabId));
+  const initialCfi = useAppStore((s) => s.tabs.find((t) => t.id === tabId)?.initialCfi);
   const closeAppTab = useAppStore((s) => s.removeTab);
   const viewSettings = useSettingsStore((s) => s.readSettings);
   const updateReadSettings = useSettingsStore((s) => s.updateReadSettings);
@@ -590,15 +590,6 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     setTranslationReady(false);
   }, [bookId]);
 
-  // Ref to track if we've already handled the initialCfi for this mount
-  const handledInitialCfiRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!appTab?.initialCfi) {
-      handledInitialCfiRef.current = null;
-    }
-  }, [appTab?.initialCfi]);
-
   // Unified navigation function that records history
   const navigateToCfi = useCallback(
     (cfi: string) => {
@@ -683,29 +674,24 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     });
   }, [bookId]);
 
-  // Navigate to initialCfi when foliate is ready (from NotesPage navigation)
+  // Wait for the current layout to settle. Relocation can rerender the reader
+  // before the timer fires, so consume the request only when navigation starts.
   useEffect(() => {
-    if (!foliateReady || !appTab?.initialCfi) return;
-
-    // Only handle each unique initialCfi once
-    if (handledInitialCfiRef.current === appTab.initialCfi) return;
-
-    const targetCfi = appTab.initialCfi;
-    handledInitialCfiRef.current = targetCfi;
+    if (!foliateReady || !initialCfi) return;
 
     const timer = setTimeout(() => {
-      if (foliateRef.current) {
-        navigateToReaderLocation(targetCfi);
-        // Clear the initialCfi in the store after a slight delay to avoid the "stickiness"
-        // caused by immediate re-render during navigation.
-        setTimeout(() => {
-          useAppStore.getState().addTab({ ...appTab, initialCfi: undefined });
-        }, 500);
-      }
+      const current = useAppStore.getState().tabs.find((tab) => tab.id === tabId);
+      if (!foliateRef.current || current?.initialCfi !== initialCfi) return;
+      navigateToReaderLocation(initialCfi);
+      useAppStore.setState((state) => ({
+        tabs: state.tabs.map((tab) =>
+          tab.id === tabId && tab.initialCfi === initialCfi ? { ...tab, initialCfi: undefined } : tab,
+        ),
+      }));
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [foliateReady, appTab, navigateToReaderLocation]);
+  }, [foliateReady, initialCfi, navigateToReaderLocation, tabId]);
 
   // Sync highlights to FoliateViewer when they change or when foliate becomes ready
   // Use a timeout to ensure the foliate view is fully initialized
