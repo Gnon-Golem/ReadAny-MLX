@@ -2,16 +2,14 @@
  * ChatPage — standalone full-page chat for general conversations.
  */
 import { ConfigGuideDialog, type ConfigGuideType } from "@/components/shared/ConfigGuideDialog";
+import { useDesktopCitationNavigation } from "@/hooks/use-desktop-citation-navigation";
 import { useDesktopResearchOptions } from "@/hooks/use-desktop-research-options";
 import { useStreamingChat } from "@/hooks/use-streaming-chat";
-import { getBook as getBookRecord } from "@/lib/db/database";
-import { openDesktopBook } from "@/lib/library/open-book";
+import { useMlxDevelopmentBuild } from "@/lib/macos-mlx-build";
 import { useChatReaderStore } from "@/stores/chat-reader-store";
 import { useChatStore } from "@/stores/chat-store";
-import { useLibraryStore } from "@/stores/library-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { getPlatformService } from "@readany/core/services";
-import type { CitationPart } from "@readany/core/types";
 import {
   convertToMessageV2,
   exportChatAsJSON,
@@ -42,6 +40,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ChatInput } from "./ChatInput";
+import { CodexChatPanel } from "./CodexChatPanel";
 import { ContextPopover } from "./ContextPopover";
 import { MessageList } from "./MessageList";
 import { ModelSelector } from "./ModelSelector";
@@ -226,6 +225,49 @@ function EmptyState({ onSuggestionClick }: { onSuggestionClick: (text: string) =
 
 export function ChatPage() {
   const { t } = useTranslation();
+  const supported = useMlxDevelopmentBuild();
+  const [codex, setCodex] = useState(() => localStorage.getItem("readany-chat-mode") === "codex");
+  const [busy, setBusy] = useState(false);
+
+  function switchMode(next: boolean) {
+    localStorage.setItem("readany-chat-mode", next ? "codex" : "api");
+    setCodex(next);
+  }
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col">
+      {supported && (
+        <div className="flex gap-1 border-b border-border px-4 py-2">
+          {[
+            { key: "chat.codexApiMode", active: !codex },
+            { key: "chat.codexMode", active: codex },
+          ].map(({ key, active }, index) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={active}
+              disabled={busy}
+              onClick={() => switchMode(index === 1)}
+              className={`rounded-md px-3 py-1 text-sm ${active ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+            >
+              {t(key)}
+            </button>
+          ))}
+        </div>
+      )}
+      {supported && codex ? (
+        <CodexChatPanel onBusy={setBusy} />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ApiChatPage />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ApiChatPage() {
+  const { t } = useTranslation();
   const threads = useChatStore((s) => s.threads);
   const initialized = useChatStore((s) => s.initialized);
   const loadAllThreads = useChatStore((s) => s.loadAllThreads);
@@ -233,7 +275,6 @@ export function ChatPage() {
   const setGeneralActiveThread = useChatStore((s) => s.setGeneralActiveThread);
   const getActiveThreadId = useChatStore((s) => s.getActiveThreadId);
   const { bookTitle } = useChatReaderStore();
-  const books = useLibraryStore((s) => s.books);
 
   // /chats page should only use general threads - always pass undefined for bookId
   const research = useDesktopResearchOptions();
@@ -292,35 +333,7 @@ export function ChatPage() {
     setGeneralActiveThread(null);
   }, [setGeneralActiveThread]);
 
-  const handleCitationClick = useCallback(
-    async (citation: CitationPart) => {
-      const book =
-        books.find((item) => item.id === citation.bookId) ??
-        (await getBookRecord(citation.bookId, { includeDeleted: true }).catch((err) => {
-          console.warn("[ChatPage] Failed to get cited book record:", err);
-          return null;
-        }));
-
-      if (!book) {
-        toast.error(t("chat.citationBookNotFound", "找不到这条引用对应的书籍"));
-        return;
-      }
-
-      const trimmedCfi = citation.cfi?.trim();
-      const initialCfi = trimmedCfi || `chapter:${Math.max(0, Number(citation.chapterIndex) || 0)}`;
-
-      const opened = await openDesktopBook({
-        book,
-        t,
-        initialCfi,
-      });
-
-      if (!opened) {
-        toast.error(t("chat.citationOpenFailed", "无法打开这条引用"));
-      }
-    },
-    [books, t],
-  );
+  const handleCitationClick = useDesktopCitationNavigation();
 
   const displayMessages = convertToMessageV2(activeThread?.messages || []);
   const activeCurrentMessage =

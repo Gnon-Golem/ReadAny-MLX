@@ -2,18 +2,20 @@
 export interface AgentRuntimeSession {
   readonly runtimeId: string;
   readonly conversationId: string;
+  readonly model?: string;
   readonly readingSessionId: string;
 }
 
 export interface AgentRuntimeOptions {
   readonly readingSessionId: string;
   readonly bookId?: string;
-  readonly workingDirectory: string;
+  readonly workingDirectory?: string;
 }
 
 export type AgentRuntimeEvent =
   | { type: "turnStarted"; turnId: string }
   | { type: "textDelta"; turnId: string; itemId: string; text: string }
+  | { type: "textItemCompleted"; turnId: string; itemId: string; text: string }
   | {
       type: "toolStatus";
       turnId: string;
@@ -23,6 +25,7 @@ export type AgentRuntimeEvent =
     }
   | { type: "bookEvidence"; turnId: string; evidenceId: string }
   | { type: "approvalRequested"; turnId: string; requestId: string; description: string }
+  | { type: "approvalResolved"; turnId: string; requestId: string }
   | {
       type: "turnFinished";
       turnId: string;

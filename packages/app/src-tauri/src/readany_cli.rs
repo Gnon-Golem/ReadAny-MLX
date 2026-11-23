@@ -447,7 +447,7 @@ fn node_executable_name() -> &'static str {
     }
 }
 
-fn command_from_path(command: &str) -> Option<PathBuf> {
+pub(crate) fn command_from_path(command: &str) -> Option<PathBuf> {
     let paths = env::var_os("PATH")?;
     env::split_paths(&paths)
         .map(|dir| dir.join(command))

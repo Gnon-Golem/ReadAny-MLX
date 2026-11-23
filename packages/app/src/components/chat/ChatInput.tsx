@@ -172,6 +172,7 @@ export function ChatInput({
             <button
               type="button"
               onClick={onStop}
+              aria-label={t("chat.stopGeneration", "Stop generation")}
               className="flex size-7 items-center justify-center rounded-full border border-destructive/20 bg-destructive text-destructive-foreground shadow-sm transition-colors hover:bg-destructive/90"
             >
               <Square className="size-3" />
@@ -181,6 +182,7 @@ export function ChatInput({
               type="button"
               disabled={disabled || (!value.trim() && quotes.length === 0)}
               onClick={() => handleSend()}
+              aria-label={t("chat.send", "Send")}
               className={`flex size-7 items-center justify-center rounded-full transition-colors ${
                 value.trim() || quotes.length > 0
                   ? "border border-primary/20 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"

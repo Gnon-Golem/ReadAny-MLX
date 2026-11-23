@@ -16,10 +16,16 @@ interface ToolRequest {
   evidence: BookEvidence[];
 }
 
-export async function startDesktopReadingMcp(): Promise<void> {
+let startup: Promise<void> | undefined;
+export function startDesktopReadingMcp(): Promise<void> {
+  startup ??= registerDesktopReadingMcp();
+  return startup;
+}
+
+async function registerDesktopReadingMcp(): Promise<void> {
   if (!(await isMlxDevelopmentBuild())) return;
   const controllers = new Map<string, AbortController>();
-  const unlisten = await Promise.all([
+  await Promise.all([
     listen<string>("readany-mcp-cancel", ({ payload }) => controllers.get(payload)?.abort()),
     listen<ToolRequest>("readany-mcp-tool", ({ payload }) => {
       const controller = new AbortController();
@@ -45,10 +51,5 @@ export async function startDesktopReadingMcp(): Promise<void> {
         .finally(() => controllers.delete(payload.requestId));
     }),
   ]);
-  let active = false;
-  try {
-    active = await invoke("readany_mcp_start", { tools: READANY_MCP_TOOLS });
-  } finally {
-    if (!active) for (const stop of unlisten) stop();
-  }
+  await invoke("readany_mcp_start", { tools: READANY_MCP_TOOLS });
 }

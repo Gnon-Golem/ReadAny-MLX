@@ -120,7 +120,7 @@ struct Server {
 struct Running {
     server: Arc<Server>,
     task: tauri::async_runtime::JoinHandle<()>,
-    descriptor: PathBuf,
+    descriptor: Option<PathBuf>,
     _lock: std::fs::File,
 }
 
@@ -135,7 +135,9 @@ impl Drop for Running {
             }
         }
         self.task.abort();
-        let _ = std::fs::remove_file(&self.descriptor);
+        if let Some(descriptor) = &self.descriptor {
+            let _ = std::fs::remove_file(descriptor);
+        }
     }
 }
 
@@ -151,7 +153,7 @@ pub fn stop(app: &AppHandle) {
 }
 
 #[cfg(unix)]
-fn write_private_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
+pub(crate) fn write_private_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
     use std::{fs::OpenOptions, io::Write, os::unix::fs::OpenOptionsExt};
     let bytes = serde_json::to_vec(value).map_err(|err| err.to_string())?;
     let temp = path.with_extension(format!("{}.tmp", Uuid::new_v4()));
@@ -172,7 +174,7 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> Result<(), String>
 }
 
 #[cfg(not(unix))]
-fn write_private_json(_: &Path, _: &impl Serialize) -> Result<(), String> {
+pub(crate) fn write_private_json(_: &Path, _: &impl Serialize) -> Result<(), String> {
     Err("Private MCP storage is unavailable on this platform.".into())
 }
 
@@ -241,7 +243,6 @@ pub async fn readany_mcp_start(
     }
     #[cfg(target_os = "macos")]
     {
-        use std::os::unix::fs::OpenOptionsExt;
         let app = window.app_handle();
         if window.label() != "main" || !crate::mlx::is_development_build(app) {
             return Ok(false);
@@ -249,83 +250,163 @@ pub async fn readany_mcp_start(
         let Some(grant) = launch_grant(std::env::args().skip(1))? else {
             return Ok(false);
         };
-        if tools.len() != TOOLS.len()
-            || !TOOLS
-                .iter()
-                .all(|name| tools.iter().any(|t| t["name"] == *name))
-        {
-            return Err("Unexpected ReadAny MCP tool list.".into());
-        }
         let mut running = state.0.lock().map_err(|_| "MCP state unavailable.")?;
         if running.is_some() {
             return Ok(true);
         }
+        let (server, _, _) = start_server(app, tools, grant, true)?;
+        *running = Some(server);
+        Ok(true)
+    }
+}
 
-        let root = private_root(app)?;
-        let lock = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o600)
-            .open(root.join("server.lock"))
-            .map_err(|err| err.to_string())?;
-        lock.try_lock()
-            .map_err(|_| "Another ReadAny process already provides MCP.")?;
-        let snapshot_path = root.join(format!("evidence-{}.json", grant.session));
-        let snapshot = restore_snapshot(&snapshot_path, grant.book_id)?;
+#[cfg(target_os = "macos")]
+fn start_server(
+    app: &AppHandle,
+    tools: Vec<Value>,
+    grant: Grant,
+    standalone: bool,
+) -> Result<(Running, String, String), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    if tools.len() != TOOLS.len()
+        || !TOOLS
+            .iter()
+            .all(|name| tools.iter().any(|tool| tool["name"] == *name))
+    {
+        return Err("Unexpected ReadAny MCP tool list.".into());
+    }
+    let root = private_root(app)?;
+    let lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(root.join("server.lock"))
+        .map_err(|err| err.to_string())?;
+    lock.try_lock()
+        .map_err(|_| "Another ReadAny process already provides MCP.")?;
+    let snapshot_path = root.join(format!("evidence-{}.json", grant.session));
+    let snapshot = restore_snapshot(&snapshot_path, grant.book_id)?;
 
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|err| err.to_string())?;
-        let host = listener
-            .local_addr()
-            .map_err(|err| err.to_string())?
-            .to_string();
-        listener
-            .set_nonblocking(true)
-            .map_err(|err| err.to_string())?;
-        let listener =
-            tokio::net::TcpListener::from_std(listener).map_err(|err| err.to_string())?;
-        let token = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        let descriptor = root.join("connection.json");
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|err| err.to_string())?;
+    let host = listener
+        .local_addr()
+        .map_err(|err| err.to_string())?
+        .to_string();
+    listener
+        .set_nonblocking(true)
+        .map_err(|err| err.to_string())?;
+    let listener = tokio::net::TcpListener::from_std(listener).map_err(|err| err.to_string())?;
+    let token = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+    let url = format!("http://{host}/mcp");
+    let descriptor = if standalone {
+        let file = root.join("connection.json");
         write_private_json(
-            &descriptor,
+            &file,
             &json!({
-                "url": format!("http://{host}/mcp"),
-                "token": token,
-                "bookId": snapshot.book_id,
-                "session": grant.session
+                "url": url, "token": token, "bookId": snapshot.book_id, "session": grant.session
             }),
         )?;
-        let server = Arc::new(Server {
-            app: app.clone(),
-            host,
-            token_hash: Sha256::digest(token.as_bytes()).into(),
-            tools,
-            sessions: Mutex::default(),
-            cancellations: DashMap::new(),
-            replies: DashMap::new(),
-            snapshot: AsyncMutex::new(snapshot),
-            snapshot_path,
-        });
-        let router = Router::new()
-            .route(
-                "/mcp",
-                post(handle_post).get(handle_get).delete(handle_delete),
-            )
-            .layer(DefaultBodyLimit::max(32 * 1024))
-            .with_state(server.clone());
-        let task = tauri::async_runtime::spawn(async move {
-            if let Err(error) = axum::serve(listener, router).await {
-                eprintln!("ReadAny MCP listener: {error}");
-            }
-        });
-        *running = Some(Running {
+        Some(file)
+    } else {
+        None
+    };
+    let server = Arc::new(Server {
+        app: app.clone(),
+        host,
+        token_hash: Sha256::digest(token.as_bytes()).into(),
+        tools,
+        sessions: Mutex::default(),
+        cancellations: DashMap::new(),
+        replies: DashMap::new(),
+        snapshot: AsyncMutex::new(snapshot),
+        snapshot_path,
+    });
+    let router = Router::new()
+        .route(
+            "/mcp",
+            post(handle_post).get(handle_get).delete(handle_delete),
+        )
+        .layer(DefaultBodyLimit::max(32 * 1024))
+        .with_state(server.clone());
+    let task = tauri::async_runtime::spawn(async move {
+        if let Err(error) = axum::serve(listener, router).await {
+            eprintln!("ReadAny MCP listener: {error}");
+        }
+    });
+    Ok((
+        Running {
             server,
             task,
             descriptor,
             _lock: lock,
-        });
-        Ok(true)
+        },
+        url,
+        token,
+    ))
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) struct EmbeddedMcp {
+    pub(crate) url: String,
+    pub(crate) token: String,
+    server: Arc<Server>,
+}
+
+#[cfg(target_os = "macos")]
+impl EmbeddedMcp {
+    pub(crate) fn start(
+        app: &AppHandle,
+        tools: Vec<Value>,
+        book: String,
+        session: Uuid,
+    ) -> Result<Self, String> {
+        let grant = launch_grant(
+            [
+                format!("--readany-mcp-book={book}"),
+                format!("--readany-mcp-session={session}"),
+            ]
+            .into_iter(),
+        )?
+        .ok_or("Missing ReadAny book grant.")?;
+        let state = app.state::<ReadingMcpState>();
+        let mut running = state.0.lock().map_err(|_| "MCP state unavailable.")?;
+        if running.is_some() {
+            return Err("ReadAny MCP is already in use. Reopen ReadAny without external MCP launch parameters.".into());
+        }
+        let (next, url, token) = start_server(app, tools, grant, false)?;
+        let server = next.server.clone();
+        *running = Some(next);
+        Ok(Self { url, token, server })
+    }
+
+    pub(crate) async fn evidence(&self, evidence_id: String) -> Result<Value, String> {
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            invoke_reading_tool(
+                &self.server,
+                "readany_get_evidence",
+                json!({ "evidenceId": evidence_id }),
+            ),
+        )
+        .await
+        .map_err(|_| "Book evidence lookup timed out.".to_string())?
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for EmbeddedMcp {
+    fn drop(&mut self) {
+        let state = self.server.app.state::<ReadingMcpState>();
+        if let Ok(mut running) = state.0.lock() {
+            if running
+                .as_ref()
+                .is_some_and(|active| Arc::ptr_eq(&active.server, &self.server))
+            {
+                running.take();
+            }
+        };
     }
 }
 

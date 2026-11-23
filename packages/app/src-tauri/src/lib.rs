@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod codex_app_server;
 mod db;
 mod mlx;
 mod readany_cli;
@@ -89,7 +91,10 @@ fn macos_webview_version_reads_the_wkwebview_framework_build() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.manage(codex_app_server::CodexHost::default());
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -132,6 +137,20 @@ pub fn run() {
             mlx::mlx_embedding,
             reading_mcp::readany_mcp_start,
             reading_mcp::readany_mcp_reply,
+            #[cfg(target_os = "macos")]
+            codex_app_server::readany_codex_open,
+            #[cfg(target_os = "macos")]
+            codex_app_server::readany_codex_send,
+            #[cfg(target_os = "macos")]
+            codex_app_server::readany_codex_approve,
+            #[cfg(target_os = "macos")]
+            codex_app_server::readany_codex_evidence,
+            #[cfg(target_os = "macos")]
+            codex_app_server::readany_codex_close,
+            #[cfg(target_os = "macos")]
+            codex_app_server::readany_codex_history_load,
+            #[cfg(target_os = "macos")]
+            codex_app_server::readany_codex_history_save,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -161,6 +180,8 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                #[cfg(target_os = "macos")]
+                codex_app_server::stop(app);
                 reading_mcp::stop(app);
             }
         });
