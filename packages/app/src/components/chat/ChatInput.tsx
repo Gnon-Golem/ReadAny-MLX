@@ -45,6 +45,7 @@ export function ChatInput({
 
   const handleSend = useCallback(
     (useDeepThinking: boolean = deepThinking) => {
+      if (disabled || isStreaming) return;
       const trimmed = value.trim();
       if (trimmed || quotes.length > 0) {
         onSend(trimmed, useDeepThinking, spoilerFree, quotes.length > 0 ? quotes : undefined);
@@ -52,12 +53,12 @@ export function ChatInput({
         if (textareaRef.current) textareaRef.current.style.height = "auto";
       }
     },
-    [value, deepThinking, spoilerFree, onSend, quotes],
+    [value, deepThinking, spoilerFree, onSend, quotes, disabled, isStreaming],
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         handleSend();
       }

@@ -1,6 +1,17 @@
 {
   "chat": {
-    "codexApiMode": "API chat",
+    "codexContinueAtHome": "Continue in main chat",
+    "agentRuntime": "Agent runtime",
+    "nativeAiMode": "Native AI",
+    "antigravityUnavailable": "Antigravity (unavailable)",
+    "readerScope": "Reading context",
+    "readerScopeBook": "Current book",
+    "readerScopeChapter": "Current chapter",
+    "readerScopeSelection": "Selected text",
+    "readerScopeGlobal": "Global chat",
+    "readerIncludeAnnotations": "Include highlights and notes from this chapter",
+    "codexOtherChatRunning": "Codex is running in another chat.",
+    "codexViewRunningChat": "View running chat",
     "codexMode": "Codex",
     "codexConversation": "Codex conversation",
     "codexBook": "Authorized book",

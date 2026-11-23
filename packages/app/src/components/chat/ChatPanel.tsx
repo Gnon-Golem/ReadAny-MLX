@@ -38,10 +38,12 @@ import { ModelSelector } from "./ModelSelector";
 
 interface ChatPanelProps {
   book?: Book | null;
+  quote?: AttachedQuote;
+  onConsumeQuote?: () => void;
   onNavigateToCitation?: (citation: CitationPart) => void;
 }
 
-export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
+export function ChatPanel({ book, quote, onConsumeQuote, onNavigateToCitation }: ChatPanelProps) {
   const { t } = useTranslation();
   const bookId = book?.id;
 
@@ -130,51 +132,13 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
     setAttachedQuotes((prev) => prev.filter((q) => q.id !== id));
   }, []);
 
-  // Check for pending quote when component mounts (from reader selection when panel was closed)
   useEffect(() => {
-    const pendingKey = `pending-ai-quote-${bookId}`;
-    const pending = sessionStorage.getItem(pendingKey);
-    if (pending) {
-      try {
-        const detail = JSON.parse(pending);
-        if (detail?.selectedText) {
-          const newQuote: AttachedQuote = {
-            id: crypto.randomUUID(),
-            text: detail.selectedText,
-            source: detail.chapterTitle,
-          };
-          setAttachedQuotes((prev) => {
-            if (prev.some((q) => q.text === newQuote.text)) return prev;
-            return [...prev, newQuote];
-          });
-        }
-      } catch {
-        // Ignore parse errors
-      }
-      sessionStorage.removeItem(pendingKey);
-    }
-  }, [bookId]);
-
-  // Listen for "Ask AI" from reader selection — now adds quote to input instead of sending immediately
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.bookId === bookId && detail?.selectedText) {
-        const newQuote: AttachedQuote = {
-          id: crypto.randomUUID(),
-          text: detail.selectedText,
-          source: detail.chapterTitle,
-        };
-        setAttachedQuotes((prev) => {
-          // Avoid duplicate text
-          if (prev.some((q) => q.text === newQuote.text)) return prev;
-          return [...prev, newQuote];
-        });
-      }
-    };
-    window.addEventListener("ask-ai-from-reader", handler);
-    return () => window.removeEventListener("ask-ai-from-reader", handler);
-  }, [bookId]);
+    if (!quote) return;
+    setAttachedQuotes((prev) =>
+      prev.some((item) => item.text === quote.text) ? prev : [...prev, quote],
+    );
+    onConsumeQuote?.();
+  }, [quote, onConsumeQuote]);
 
   const handleNewThread = useCallback(async () => {
     if (!bookId) return;

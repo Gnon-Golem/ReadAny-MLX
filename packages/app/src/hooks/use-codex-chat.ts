@@ -1,9 +1,18 @@
 import { CodexRuntime, citeCodexAnswer } from "@/lib/agents/codex-runtime";
 import { startDesktopReadingMcp } from "@/lib/agents/reading-mcp";
+import { useMlxDevelopmentBuild } from "@/lib/macos-mlx-build";
 import type { AgentRuntimeEvent, AgentRuntimeSession } from "@readany/core/ai";
-import type { Message, ToolCall } from "@readany/core/types";
+import type { AttachedQuote, Message, ToolCall } from "@readany/core/types";
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 export interface CodexChat {
   id: string;
@@ -41,10 +50,13 @@ async function loadHistory(): Promise<CodexChat[]> {
   return decoded;
 }
 
-export function useCodexChat() {
+function useCodexController(enabled: boolean) {
+  const [homeBook, setHomeBook] = useState<string>();
+  const [homeRequest, setHomeRequest] = useState(0);
   const [history, setHistory] = useState<CodexChat[]>([]);
   const historyRef = useRef<CodexChat[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selections, setSelections] = useState<Record<string, string | null>>({});
+  const [operation, setOperation] = useState<{ chatId: string; bookId?: string }>();
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -61,6 +73,7 @@ export function useCodexChat() {
   const mounted = useRef(false);
 
   useEffect(() => {
+    if (!enabled) return;
     mounted.current = true;
     let active = true;
     void loadHistory()
@@ -68,7 +81,6 @@ export function useCodexChat() {
         if (active) {
           historyRef.current = items;
           setHistory(items);
-          setSelected(items[0]?.id ?? null);
           setReady(true);
         }
       })
@@ -83,7 +95,7 @@ export function useCodexChat() {
       runtime.current = null;
       void host?.client.close(host.session);
     };
-  }, []);
+  }, [enabled]);
 
   async function persist(chat: CodexChat) {
     const next = [chat, ...historyRef.current.filter((record) => record.id !== chat.id)];
@@ -92,8 +104,24 @@ export function useCodexChat() {
     await saveHistory(next);
   }
 
-  async function send(prompt: string, bookId?: string): Promise<void> {
-    if (!prompt.trim() || controller.current || !ready) return;
+  function select(bookId: string | undefined, chatId: string | null) {
+    setSelections((current) => ({ ...current, [bookId ?? ""]: chatId }));
+  }
+
+  async function send({
+    text,
+    prompt,
+    bookId,
+    chatId,
+    quotes = [],
+  }: {
+    text: string;
+    prompt: string;
+    bookId?: string;
+    chatId: string | null;
+    quotes?: AttachedQuote[];
+  }): Promise<void> {
+    if ((!text.trim() && quotes.length === 0) || controller.current || !ready) return;
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true);
@@ -101,18 +129,29 @@ export function useCodexChat() {
     setError("");
     setApprovals([]);
 
-    let chat = historyRef.current.find((record) => record.id === selected) ?? {
+    let chat = historyRef.current.find(
+      (record) => record.id === chatId && record.bookId === bookId,
+    ) ?? {
       id: crypto.randomUUID(),
       bookId,
-      title: prompt.trim().slice(0, 70),
+      title: (text.trim() || quotes[0]?.text || "").slice(0, 70),
       messages: [],
     };
+    setOperation({ chatId: chat.id, bookId });
     const user: Message = {
       id: crypto.randomUUID(),
       threadId: chat.id,
       role: "user",
-      content: prompt.trim(),
+      content: text.trim(),
       createdAt: Date.now(),
+      partsOrder: quotes.length
+        ? [
+            ...quotes.map((quote) => ({ ...quote, type: "quote" as const })),
+            ...(text.trim()
+              ? [{ type: "text" as const, id: crypto.randomUUID(), text: text.trim() }]
+              : []),
+          ]
+        : undefined,
     };
     const assistant: Message = {
       id: crypto.randomUUID(),
@@ -130,7 +169,7 @@ export function useCodexChat() {
     };
 
     try {
-      setSelected(chat.id);
+      select(bookId, chat.id);
       chat = { ...chat, messages: [...chat.messages, user] };
       await persist(chat);
       await startDesktopReadingMcp();
@@ -156,11 +195,7 @@ export function useCodexChat() {
 
       abort.signal.throwIfAborted();
       if (!running.session) throw new Error("Could not initialize the Codex conversation.");
-      for await (const event of running.client.runTurn(
-        running.session,
-        user.content,
-        abort.signal,
-      )) {
+      for await (const event of running.client.runTurn(running.session, prompt, abort.signal)) {
         switch (event.type) {
           case "textDelta":
           case "textItemCompleted":
@@ -261,9 +296,17 @@ export function useCodexChat() {
   }
 
   return {
+    homeBook,
+    setHomeBook,
+    homeRequest,
+    showAtHome(bookId: string | undefined) {
+      setHomeBook(bookId ?? "");
+      setHomeRequest((value) => value + 1);
+    },
     history,
-    selected,
-    select: setSelected,
+    selections,
+    operation,
+    select,
     send,
     stop,
     approve,
@@ -275,4 +318,18 @@ export function useCodexChat() {
     error,
     approvals,
   };
+}
+
+const CodexChatContext = createContext<ReturnType<typeof useCodexController> | null>(null);
+
+export function CodexChatProvider({ children }: { children: ReactNode }) {
+  const enabled = useMlxDevelopmentBuild();
+  const controller = useCodexController(enabled);
+  return createElement(CodexChatContext.Provider, { value: controller }, children);
+}
+
+export function useCodexChat() {
+  const controller = useContext(CodexChatContext);
+  if (!controller) throw new Error("Codex chat requires its application provider.");
+  return controller;
 }

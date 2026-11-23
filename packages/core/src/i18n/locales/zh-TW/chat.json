@@ -1,6 +1,17 @@
 {
   "chat": {
-    "codexApiMode": "API 對話",
+    "codexContinueAtHome": "在首頁繼續",
+    "agentRuntime": "執行環境",
+    "nativeAiMode": "原生 AI",
+    "antigravityUnavailable": "Antigravity（暫不可用）",
+    "readerScope": "閱讀上下文",
+    "readerScopeBook": "目前書籍",
+    "readerScopeChapter": "目前章節",
+    "readerScopeSelection": "選取內容",
+    "readerScopeGlobal": "全域對話",
+    "readerIncludeAnnotations": "附上本章畫線和筆記",
+    "codexOtherChatRunning": "Codex 正在另一個對話中執行。",
+    "codexViewRunningChat": "查看執行中的對話",
     "codexMode": "Codex",
     "codexConversation": "Codex 對話",
     "codexBook": "授權書籍",

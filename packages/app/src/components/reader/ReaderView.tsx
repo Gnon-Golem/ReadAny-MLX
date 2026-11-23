@@ -1,3 +1,5 @@
+import type { ReaderQuote } from "@/lib/agents/reader-chat-context";
+import { AgentChatPanel } from "@/components/chat/AgentChatPanel";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 /**
  * ReaderView — main reader page component.
@@ -771,6 +773,8 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const [totalPages, setTotalPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [showChat, setShowChat] = useState(false);
+  const [chatQuote, setChatQuote] = useState<ReaderQuote>();
+  const consumeChatQuote = useCallback(() => setChatQuote(undefined), []);
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [isReimporting, setIsReimporting] = useState(false);
@@ -1782,30 +1786,14 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
 
   const handleAskAI = useCallback(() => {
     if (selection?.text) {
-      // Store in sessionStorage in case ChatPanel is not mounted yet
-      // ChatPanel will check and consume this on mount
-      sessionStorage.setItem(
-        `pending-ai-quote-${bookId}`,
-        JSON.stringify({
-          selectedText: selection.text,
-          bookId,
-          chapterTitle: readerTab?.chapterTitle,
-        }),
-      );
-
-      // Open chat panel
+      setChatQuote({
+        id: crypto.randomUUID(),
+        bookId,
+        text: selection.text,
+        source: readerTab?.chapterTitle,
+        cfi: selection.cfi,
+      });
       setShowChat(true);
-
-      // Also dispatch event for immediate handling if panel is already open
-      window.dispatchEvent(
-        new CustomEvent("ask-ai-from-reader", {
-          detail: {
-            selectedText: selection.text,
-            bookId,
-            chapterTitle: readerTab?.chapterTitle,
-          },
-        }),
-      );
     }
     setSelection(null);
   }, [selection, bookId, readerTab?.chapterTitle]);
@@ -3176,7 +3164,20 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             </button>
           </div>
           <div className="flex-1 overflow-hidden">
-            <ChatPanel book={book} onNavigateToCitation={handleNavigateToCitation} />
+            <AgentChatPanel
+              reader={readerTab}
+              quote={chatQuote?.bookId === bookId ? chatQuote : undefined}
+              onConsumeQuote={consumeChatQuote}
+              onCitationClick={handleNavigateToCitation}
+              renderNative={(quote) => (
+                <ChatPanel
+                  book={book}
+                  quote={quote}
+                  onConsumeQuote={consumeChatQuote}
+                  onNavigateToCitation={handleNavigateToCitation}
+                />
+              )}
+            />
           </div>
         </div>
       )}

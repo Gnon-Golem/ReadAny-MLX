@@ -5,7 +5,6 @@ import { ConfigGuideDialog, type ConfigGuideType } from "@/components/shared/Con
 import { useDesktopCitationNavigation } from "@/hooks/use-desktop-citation-navigation";
 import { useDesktopResearchOptions } from "@/hooks/use-desktop-research-options";
 import { useStreamingChat } from "@/hooks/use-streaming-chat";
-import { useMlxDevelopmentBuild } from "@/lib/macos-mlx-build";
 import { useChatReaderStore } from "@/stores/chat-reader-store";
 import { useChatStore } from "@/stores/chat-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -39,8 +38,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { AgentChatPanel } from "./AgentChatPanel";
 import { ChatInput } from "./ChatInput";
-import { CodexChatPanel } from "./CodexChatPanel";
 import { ContextPopover } from "./ContextPopover";
 import { MessageList } from "./MessageList";
 import { ModelSelector } from "./ModelSelector";
@@ -224,46 +223,7 @@ function EmptyState({ onSuggestionClick }: { onSuggestionClick: (text: string) =
 }
 
 export function ChatPage() {
-  const { t } = useTranslation();
-  const supported = useMlxDevelopmentBuild();
-  const [codex, setCodex] = useState(() => localStorage.getItem("readany-chat-mode") === "codex");
-  const [busy, setBusy] = useState(false);
-
-  function switchMode(next: boolean) {
-    localStorage.setItem("readany-chat-mode", next ? "codex" : "api");
-    setCodex(next);
-  }
-
-  return (
-    <div className="flex h-full min-h-0 w-full flex-col">
-      {supported && (
-        <div className="flex gap-1 border-b border-border px-4 py-2">
-          {[
-            { key: "chat.codexApiMode", active: !codex },
-            { key: "chat.codexMode", active: codex },
-          ].map(({ key, active }, index) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={active}
-              disabled={busy}
-              onClick={() => switchMode(index === 1)}
-              className={`rounded-md px-3 py-1 text-sm ${active ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
-            >
-              {t(key)}
-            </button>
-          ))}
-        </div>
-      )}
-      {supported && codex ? (
-        <CodexChatPanel onBusy={setBusy} />
-      ) : (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <ApiChatPage />
-        </div>
-      )}
-    </div>
-  );
+  return <AgentChatPanel renderNative={() => <ApiChatPage />} />;
 }
 
 function ApiChatPage() {

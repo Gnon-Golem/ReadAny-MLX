@@ -117,6 +117,11 @@ for line in sys.stdin:
         assert params["sandboxPolicy"] == {"type": "readOnly", "networkAccess": False}
         turn = str(uuid.uuid4())
         text = params["input"][0]["text"]
+        if text.startswith("ReadAny reader context follows."):
+            _, context, text = text.split("\n\n", 2)
+            context = json.loads(context)
+            log("reader-context", scope=context["scope"], chapter="chapter" in context,
+                selection="selection" in context, annotations="notes" in context)
         notify("turn/started", turn={"id": turn, "status": "inProgress", "items": []})
         emit(id=ident, result={"turn": {"id": turn}})
         if text == "fixture approval":

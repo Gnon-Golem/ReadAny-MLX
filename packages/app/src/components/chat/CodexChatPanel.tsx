@@ -9,86 +9,210 @@ import {
 } from "@/components/ui/dialog";
 import { useCodexChat } from "@/hooks/use-codex-chat";
 import { useDesktopCitationNavigation } from "@/hooks/use-desktop-citation-navigation";
+import {
+  type ReaderChatContext,
+  type ReaderChatScope,
+  type ReaderQuote,
+  readerTurnContext,
+} from "@/lib/agents/reader-chat-context";
+import { useAnnotationStore } from "@/stores/annotation-store";
+import { useAppStore } from "@/stores/app-store";
 import { useLibraryStore } from "@/stores/library-store";
+import type { CitationPart } from "@readany/core/types";
 import { convertToMessageV2 } from "@readany/core/utils";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
 
-export function CodexChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) {
+interface Props {
+  reader?: ReaderChatContext;
+  quote?: ReaderQuote;
+  onConsumeQuote?: () => void;
+  onCitationClick?: (part: CitationPart) => void;
+}
+
+export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick }: Props) {
   const { t } = useTranslation();
   const books = useLibraryStore((state) => state.books);
-  const [bookId, setBookId] = useState("");
+  const [scope, setScope] = useState<ReaderChatScope>("book");
+  const [attached, setAttached] = useState<ReaderQuote>();
+  const [includeAnnotations, setIncludeAnnotations] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const chat = useCodexChat();
   const openCitation = useDesktopCitationNavigation();
-  const pendingConfirmation = chat.approvals.find((item) => item.requestId === confirmId);
-  const active = chat.history.find(({ id }) => id === chat.selected);
+  const bookId = reader
+    ? scope === "global"
+      ? undefined
+      : reader.bookId
+    : (chat.homeBook ?? chat.history[0]?.bookId ?? "") || undefined;
+  const history = chat.history.filter((record) => record.bookId === bookId);
+  const selection = chat.selections[bookId ?? ""];
+  const active =
+    selection === null
+      ? undefined
+      : (history.find((record) => record.id === selection) ?? history[0]);
+  const viewingOperation = Boolean(active && active.id === chat.operation?.chatId);
+  const isStreaming = chat.busy && viewingOperation;
+  const approvals = isStreaming ? chat.approvals : [];
+  const pendingConfirmation = approvals.find((item) => item.requestId === confirmId);
   const messages = convertToMessageV2([
     ...(active?.messages ?? []),
-    ...(chat.partial ? [chat.partial] : []),
+    ...(viewingOperation && chat.partial ? [chat.partial] : []),
   ]);
+  const activeQuote = attached?.bookId === reader?.bookId ? attached : undefined;
+  const canSelect = Boolean(activeQuote?.text || reader?.selectedText.trim());
+  const missingSelection = scope === "selection" && !canSelect;
 
   useEffect(() => {
-    onBusy(chat.busy);
-  }, [chat.busy, onBusy]);
+    if (quote && quote.bookId === reader?.bookId) {
+      setAttached(quote);
+      setScope("selection");
+      onConsumeQuote?.();
+    }
+  }, [quote, reader?.bookId, onConsumeQuote]);
+
+  function send(text: string) {
+    const annotationState = useAnnotationStore.getState();
+    const { prompt, quotes } = readerTurnContext({
+      reader,
+      scope,
+      question: text,
+      quote: activeQuote,
+      annotations: includeAnnotations ? annotationState : undefined,
+    });
+    void chat.send({ text, prompt, bookId, chatId: active?.id ?? null, quotes });
+    setIncludeAnnotations(false);
+    if (scope === "selection") {
+      setAttached(undefined);
+      setScope("book");
+    }
+  }
+
+  const preview =
+    scope === "selection"
+      ? readerTurnContext({ reader, scope, question: "", quote: activeQuote }).quotes
+      : [];
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+        {!reader && (
+          <label className="flex min-w-0 items-center gap-2 text-sm">
+            <span>{t("chat.codexBook")}</span>
+            <select
+              className="min-w-0 max-w-xs rounded-md border border-border bg-background px-2 py-1.5"
+              value={bookId ?? ""}
+              onChange={(event) => chat.setHomeBook(event.target.value)}
+            >
+              <option value="">{t("chat.codexNoBook")}</option>
+              {books
+                .filter((book) => book.syncStatus === "local")
+                .map((book) => (
+                  <option key={book.id} value={book.id}>
+                    {book.meta.title}
+                  </option>
+                ))}
+              {bookId &&
+                !books.some((book) => book.id === bookId && book.syncStatus === "local") && (
+                  <option value={bookId}>{t("chat.codexUnavailableBook")}</option>
+                )}
+            </select>
+          </label>
+        )}
+
+        {reader && (
+          <select
+            aria-label={t("chat.readerScope")}
+            className="min-w-0 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            value={scope}
+            onChange={(event) => setScope(event.target.value as ReaderChatScope)}
+          >
+            <option value="book">{t("chat.readerScopeBook")}</option>
+            <option value="chapter">{t("chat.readerScopeChapter")}</option>
+            <option value="selection" disabled={!canSelect}>
+              {t("chat.readerScopeSelection")}
+            </option>
+            <option value="global">{t("chat.readerScopeGlobal")}</option>
+          </select>
+        )}
+
         <select
           aria-label={t("chat.codexConversation")}
           className="min-w-0 max-w-xs rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-          value={chat.selected ?? ""}
-          disabled={chat.busy || !chat.ready}
-          onChange={(event) => chat.select(event.target.value || null)}
+          value={active?.id ?? ""}
+          disabled={!chat.ready}
+          onChange={(event) => chat.select(bookId, event.target.value || null)}
         >
           <option value="">{t("chat.newChat")}</option>
-          {chat.history.map((thread) => (
+          {history.map((thread) => (
             <option key={thread.id} value={thread.id}>
               {thread.title}
             </option>
           ))}
         </select>
-
-        <label className="flex min-w-0 items-center gap-2 text-sm">
-          <span>{t("chat.codexBook")}</span>
-          <select
-            className="min-w-0 max-w-xs rounded-md border border-border bg-background px-2 py-1.5"
-            value={active ? (active.bookId ?? "") : bookId}
-            disabled={Boolean(active) || chat.busy}
-            onChange={(event) => setBookId(event.target.value)}
+        {reader && active && (
+          <button
+            type="button"
+            className="text-xs text-primary underline"
+            onClick={() => {
+              chat.showAtHome(bookId);
+              useAppStore.getState().addTab({ id: "chat", type: "chat", title: t("sidebar.chat") });
+            }}
           >
-            <option value="">{t("chat.codexNoBook")}</option>
-            {books
-              .filter((book) => book.syncStatus === "local")
-              .map((book) => (
-                <option key={book.id} value={book.id}>
-                  {book.meta.title}
-                </option>
-              ))}
-            {active?.bookId &&
-              !books.some((book) => book.id === active.bookId && book.syncStatus === "local") && (
-                <option value={active.bookId}>{t("chat.codexUnavailableBook")}</option>
-              )}
-          </select>
-        </label>
+            {t("chat.codexContinueAtHome")}
+          </button>
+        )}
+        {active?.session?.model && (
+          <span className="truncate text-xs text-muted-foreground">{active.session.model}</span>
+        )}
+        {reader && scope !== "global" && (
+          <label className="flex basis-full items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={includeAnnotations}
+              onChange={(event) => setIncludeAnnotations(event.target.checked)}
+            />
+            {t("chat.readerIncludeAnnotations")}
+          </label>
+        )}
         <p className="basis-full text-xs text-muted-foreground">
-          {t((active ? active.bookId : bookId) ? "chat.codexBookSharing" : "chat.codexNativeWeb")}
+          {t(bookId ? "chat.codexBookSharing" : "chat.codexNativeWeb")}
         </p>
       </div>
+
+      {chat.busy && !viewingOperation && (
+        <output className="flex flex-wrap items-center gap-2 px-3 py-1 text-xs text-muted-foreground">
+          {t("chat.codexOtherChatRunning")}
+          {chat.operation && (!reader || chat.operation.bookId === bookId) && (
+            <button
+              type="button"
+              className="text-primary underline"
+              onClick={() => {
+                if (!chat.operation) return;
+                if (!reader) chat.setHomeBook(chat.operation.bookId ?? "");
+                chat.select(chat.operation.bookId, chat.operation.chatId);
+              }}
+            >
+              {t("chat.codexViewRunningChat")}
+            </button>
+          )}
+        </output>
+      )}
 
       <div className="min-h-0 flex-1 overflow-hidden">
         <MessageList
           messages={messages}
-          isStreaming={chat.busy}
-          currentStep={chat.step}
-          onCitationClick={openCitation}
+          isStreaming={isStreaming}
+          currentStep={viewingOperation ? chat.step : "idle"}
+          onCitationClick={(part) => {
+            if (part.bookId === reader?.bookId && onCitationClick) onCitationClick(part);
+            else void openCitation(part);
+          }}
         />
       </div>
 
-      {chat.approvals.map((request) => (
+      {approvals.map((request) => (
         <div
           key={request.requestId}
           role="alert"
@@ -151,22 +275,27 @@ export function CodexChatPanel({ onBusy }: { onBusy: (busy: boolean) => void }) 
         </DialogContent>
       </Dialog>
 
-      {chat.error && (
+      {chat.error && (!chat.ready || viewingOperation) && (
         <p role="alert" className="px-4 py-1 text-sm text-destructive">
           {chat.error}
         </p>
       )}
-      {chat.stopping && (
+      {isStreaming && chat.stopping && (
         <output className="px-4 py-1 text-xs text-muted-foreground">
           {t("chat.codexStopping")}
         </output>
       )}
       <div className="shrink-0 px-4 pb-3 pt-2">
         <ChatInput
-          onSend={(prompt) => void chat.send(prompt, bookId || undefined)}
+          onSend={send}
           onStop={chat.stop}
-          isStreaming={chat.busy}
-          disabled={!chat.ready}
+          isStreaming={isStreaming}
+          disabled={!chat.ready || (chat.busy && !viewingOperation) || missingSelection}
+          quotes={preview}
+          onRemoveQuote={() => {
+            setAttached(undefined);
+            setScope("book");
+          }}
           showDeepThinking={false}
           placeholder={t("chat.codexAsk")}
         />
