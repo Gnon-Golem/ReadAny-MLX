@@ -1,3 +1,7 @@
+This branch tracks the upstream ReadAny base source.
+
+[iOS / iPad MLX](https://github.com/Gnon-Golem/ReadAny-MLX/tree/mlx-ios) · [macOS MLX](https://github.com/Gnon-Golem/ReadAny-MLX/tree/macos-mlx) · [macOS Agent](https://github.com/Gnon-Golem/ReadAny-MLX/tree/feat/macos-mlx-agents) · [Downloads / 下载](https://github.com/Gnon-Golem/ReadAny-MLX/tree/downloads)
+
 <p align="center">
   <img src="packages/app/public/logo.svg" alt="ReadAny Logo" width="120" height="120">
 </p>
