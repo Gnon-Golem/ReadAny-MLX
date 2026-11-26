@@ -1,3 +1,7 @@
+本分支为 Apple Silicon macOS 基础版，包含本地 MLX、RAG 和 Parallel 联网研究。参见 [macOS 构建说明](docs/macos-mlx.md)。
+
+[iOS / iPad MLX](https://github.com/Gnon-Golem/ReadAny-MLX/tree/mlx-ios) · [macOS MLX](https://github.com/Gnon-Golem/ReadAny-MLX/tree/macos-mlx) · [macOS Agent](https://github.com/Gnon-Golem/ReadAny-MLX/tree/feat/macos-mlx-agents) · [Downloads / 下载](https://github.com/Gnon-Golem/ReadAny-MLX/tree/downloads)
+
 <p align="center">
   <img src="packages/app/public/logo.svg" alt="ReadAny logo" width="112" height="112">
 </p>
@@ -41,7 +45,7 @@ Import the IPA into SideStore and sign it with your Apple ID. [Download and impo
 
 签名 iPad 版已跑通同一轮书内检索与真实联网搜索。最新查询指引经过自动化测试和同一 Q8 模型对照，修复版在 iPad 安装与启动通过。实际帐号下的新版回答及公开 IPA 的 SideStore 安装和续签待验证。
 
-[研究源码分支](https://github.com/Gnon-Golem/ReadAny-MLX/tree/feat/unified-research) · [本 IPA 对应源码](https://github.com/Gnon-Golem/ReadAny-MLX/tree/6df597d6de8bc83e24395e84eeb38a68fac55982) · [架构、验收与限制](https://github.com/Gnon-Golem/ReadAny-MLX/tree/6df597d6de8bc83e24395e84eeb38a68fac55982/docs/superpowers/specs/2026-11-21-unified-research-design.md)
+[研究源码分支](https://github.com/Gnon-Golem/ReadAny-MLX/tree/mlx-ios) · [本 IPA 对应源码](https://github.com/Gnon-Golem/ReadAny-MLX/tree/6df597d6de8bc83e24395e84eeb38a68fac55982) · [架构、验收与限制](https://github.com/Gnon-Golem/ReadAny-MLX/tree/6df597d6de8bc83e24395e84eeb38a68fac55982/docs/superpowers/specs/2026-11-21-unified-research-design.md)
 
 ## 功能
 
@@ -53,7 +57,7 @@ Import the IPA into SideStore and sign it with your Apple ID. [Download and impo
 
 在 Apple Silicon Mac 上安装 Xcode 和 Metal Toolchain，以及 Node.js 22、pnpm 9.15.0、CocoaPods 和 CMake。Swift 依赖要求 Swift 工具链 6.2 或更新版本，构建目标最低为 iOS 17。原始验收使用 Xcode 27.2。
 
-构建研究版请先检出 [`feat/unified-research`](https://github.com/Gnon-Golem/ReadAny-MLX/tree/feat/unified-research)。从仓库根目录执行：
+构建研究版请先检出 [`mlx-ios`](https://github.com/Gnon-Golem/ReadAny-MLX/tree/mlx-ios)。从仓库根目录执行：
 
 ```sh
 pnpm install --frozen-lockfile

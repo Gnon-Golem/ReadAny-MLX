@@ -1,6 +1,6 @@
 # ReadAny MLX macOS 开发版
 
-基于 `feat/unified-research` 的 ReadAny 1.3.7。移植差异见 [审计报告](superpowers/specs/2026-11-23-macos-mlx-design.md)。
+本指南适用于 `macos-mlx`，研究功能源自 ReadAny 1.3.7 的 `mlx-ios` 研究实现。移植差异见 [审计报告](superpowers/specs/2026-11-23-macos-mlx-design.md)。
 
 ## 构建和启动
 
