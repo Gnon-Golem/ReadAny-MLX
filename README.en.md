@@ -1,3 +1,7 @@
+This branch contains the iOS / iPad MLX research edition.
+
+[iOS / iPad MLX](https://github.com/Gnon-Golem/ReadAny-MLX/tree/mlx-ios) · [macOS MLX](https://github.com/Gnon-Golem/ReadAny-MLX/tree/macos-mlx) · [macOS Agent](https://github.com/Gnon-Golem/ReadAny-MLX/tree/feat/macos-mlx-agents) · [Downloads / 下载](https://github.com/Gnon-Golem/ReadAny-MLX/tree/downloads)
+
 # ReadAny-MLX
 
 [中文 / 中文首页](README.md) · [Download the research iOS IPA](https://raw.githubusercontent.com/Gnon-Golem/ReadAny-MLX/f577d780ef6a53c4a6fc5b6d781abd7350010481/ReadAny-MLX-1.3.7-build2-research-iOS.ipa) · [SHA-256](https://raw.githubusercontent.com/Gnon-Golem/ReadAny-MLX/f577d780ef6a53c4a6fc5b6d781abd7350010481/SHA256SUMS-research.txt)
@@ -12,7 +16,7 @@ Web search uses Parallel and can be rate-limited. Indexed books remain searchabl
 
 An Xcode-signed iPad build exercised book retrieval and live web search in the same turn. The latest query changes passed automated tests and a comparison with the same Q8 model. The fixed build installed and launched on iPad. Conversation quality with the user's chat provider and SideStore installation and refresh of the public IPA are pending device verification.
 
-[Research branch](https://github.com/Gnon-Golem/ReadAny-MLX/tree/feat/unified-research) · [Corresponding source for this IPA](https://github.com/Gnon-Golem/ReadAny-MLX/tree/6df597d6de8bc83e24395e84eeb38a68fac55982) · [Architecture, validation and limitations](https://github.com/Gnon-Golem/ReadAny-MLX/tree/6df597d6de8bc83e24395e84eeb38a68fac55982/docs/superpowers/specs/2026-11-21-unified-research-design.md)
+[Research branch](https://github.com/Gnon-Golem/ReadAny-MLX/tree/mlx-ios) · [Corresponding source for this IPA](https://github.com/Gnon-Golem/ReadAny-MLX/tree/6df597d6de8bc83e24395e84eeb38a68fac55982) · [Architecture, validation and limitations](https://github.com/Gnon-Golem/ReadAny-MLX/tree/6df597d6de8bc83e24395e84eeb38a68fac55982/docs/superpowers/specs/2026-11-21-unified-research-design.md)
 
 ## Features
 
@@ -36,7 +40,7 @@ Open the embedding model settings from your profile in ReadAny MLX. On the Qwen3
 
 ## Build from source
 
-Use an Apple Silicon Mac with Xcode, the Metal Toolchain, Swift 6.2 or later, Node.js 22, pnpm 9.15.0, CocoaPods and CMake. The original build used Xcode 27.2. To build the research edition, check out [`feat/unified-research`](https://github.com/Gnon-Golem/ReadAny-MLX/tree/feat/unified-research). Run from the repository root.
+Use an Apple Silicon Mac with Xcode, the Metal Toolchain, Swift 6.2 or later, Node.js 22, pnpm 9.15.0, CocoaPods and CMake. The original build used Xcode 27.2. To build the research edition, check out [`mlx-ios`](https://github.com/Gnon-Golem/ReadAny-MLX/tree/mlx-ios). Run from the repository root.
 
 ```sh
 pnpm install --frozen-lockfile
