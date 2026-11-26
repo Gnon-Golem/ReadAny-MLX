@@ -22,7 +22,49 @@ use uuid::Uuid;
 
 const EVENT: &str = "readany-acp-ipc";
 const HISTORY: &str = "antigravity-chat-history.json";
-const SETTINGS: &str = r#"{"agentMode":"","toolPermission":"request-review","permissions":{"ask":["command(*)","read_file(*)","write_file(*)","unsandboxed(*)"]}}"#;
+#[derive(Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+enum PermissionMode {
+    Review,
+    #[default]
+    Default,
+    Auto,
+    Full,
+}
+
+impl PermissionMode {
+    fn execution_mode(self) -> &'static str {
+        match self {
+            Self::Review | Self::Default => "default",
+            Self::Auto => "auto",
+            Self::Full => "accept-edits",
+        }
+    }
+
+    fn sandbox(self) -> bool {
+        self != Self::Full
+    }
+
+    fn settings(self) -> Value {
+        let policy = match self {
+            Self::Review => "request-review",
+            Self::Default | Self::Auto => "proceed-in-sandbox",
+            Self::Full => "always-proceed",
+        };
+        let mut settings = json!({
+            "agentMode": if self.execution_mode() == "default" { "" } else { self.execution_mode() },
+            "toolPermission": policy,
+            "enableTerminalSandbox": self.sandbox(),
+            "allowNonWorkspaceAccess": self == Self::Full,
+        });
+        if self == Self::Review {
+            settings["permissions"] = json!({
+                "ask": ["command(*)", "read_file(*)", "write_file(*)", "unsandboxed(*)", "mcp(*)", "read_url(*)", "execute_url(*)"]
+            });
+        }
+        settings
+    }
+}
 
 type Writer = Arc<AsyncMutex<ChildStdin>>;
 type Pending = Arc<Mutex<HashMap<String, Vec<Value>>>>;
@@ -38,6 +80,7 @@ struct Process {
     approvals: Pending,
     cwd: PathBuf,
     mcp: Option<Arc<EmbeddedMcp>>,
+    permission_mode: PermissionMode,
 }
 
 impl Drop for Process {
@@ -61,6 +104,8 @@ pub struct Launch {
     reading_session_id: Uuid,
     book_id: Option<String>,
     tools: Vec<Value>,
+    #[serde(default)]
+    permission_mode: PermissionMode,
 }
 
 #[derive(Serialize)]
@@ -107,6 +152,18 @@ pub async fn readany_acp_open(
     if slot.is_some() {
         return Err("Close the active Antigravity connection first.".into());
     }
+    let permission_mode = launch.permission_mode;
+    if permission_mode == PermissionMode::Full {
+        let local_id = launch.reading_session_id.to_string();
+        let persisted = readany_acp_history_load(window.clone())?;
+        if !persisted.iter().any(|chat| {
+            chat["id"].as_str() == Some(local_id.as_str())
+                && chat["bookId"].as_str() == launch.book_id.as_deref()
+                && chat["permissionMode"] == "full"
+        }) {
+            return Err("Confirm Full Access for this Antigravity conversation first.".into());
+        }
+    }
     let binary = installed_agy(app)?;
     let cwd = agent_workspace(app, "desktop-antigravity", launch.reading_session_id)?;
     let mcp = launch
@@ -119,11 +176,10 @@ pub async fn readany_acp_open(
     let mut command = Command::new(binary);
     command
         .current_dir(&cwd)
+        .arg("--settings")
+        .arg(permission_mode.settings().to_string())
         .args([
-            "--settings",
-            SETTINGS,
             "acp",
-            "--sandbox",
             "--process-per-session",
             "--include-default-customizations=false",
             "--disable-telemetry",
@@ -136,6 +192,9 @@ pub async fn readany_acp_open(
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
+    if permission_mode.sandbox() {
+        command.arg("--sandbox");
+    }
     let mut child = command
         .spawn()
         .map_err(|err| format!("Could not start Antigravity: {err}"))?;
@@ -152,6 +211,7 @@ pub async fn readany_acp_open(
         input.clone(),
         approvals.clone(),
         mcp.as_ref().map(|lease| lease.token.clone()),
+        permission_mode,
     ));
     *slot = Some(Process {
         id,
@@ -161,6 +221,7 @@ pub async fn readany_acp_open(
         approvals,
         cwd: cwd.clone(),
         mcp,
+        permission_mode,
     });
     Ok(HostInfo {
         process_id: id,
@@ -175,6 +236,7 @@ async fn read_output(
     input: Writer,
     approvals: Pending,
     token: Option<String>,
+    permission_mode: PermissionMode,
 ) {
     let mut lines = BufReader::new(stdout).lines();
     while let Ok(Some(line)) = lines.next_line().await {
@@ -187,6 +249,20 @@ async fn read_output(
         if let (Some(method), Some(id)) = (packet["method"].as_str(), packet.get("id")) {
             if method == "session/request_permission" {
                 if let Some(options) = packet["params"]["options"].as_array() {
+                    // The process-per-session worker can still ask with the CLI's
+                    // always-proceed setting. Honor the saved client-side grant.
+                    if let Some(outcome) = auto_permission_outcome(permission_mode, options) {
+                        if send(
+                            &input,
+                            json!({"jsonrpc":"2.0","id":id,"result":{"outcome":outcome}}),
+                        )
+                        .await
+                        .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
                     if let Ok(mut pending) = approvals.lock() {
                         pending.insert(id.to_string(), options.clone());
                     }
@@ -232,6 +308,7 @@ fn prepare_request(
     packet: Value,
     cwd: &std::path::Path,
     lease: Option<&EmbeddedMcp>,
+    permission_mode: PermissionMode,
 ) -> Result<Value, String> {
     let method = packet["method"]
         .as_str()
@@ -275,7 +352,7 @@ fn prepare_request(
                 .ok_or("Missing ACP config value.")?;
             let allowed = match config {
                 "model" => value.to_ascii_lowercase().starts_with("gemini-"),
-                "mode" => matches!(value, "default" | "plan"),
+                "mode" => value == permission_mode.execution_mode(),
                 "thought_level" => !value.is_empty(),
                 _ => false,
             };
@@ -316,7 +393,12 @@ pub async fn readany_acp_send(
     let (input, request) = {
         let slot = host.0.lock().map_err(|_| "ACP host is unavailable.")?;
         let process = current(&slot, process_id)?;
-        let request = prepare_request(packet, &process.cwd, process.mcp.as_deref())?;
+        let request = prepare_request(
+            packet,
+            &process.cwd,
+            process.mcp.as_deref(),
+            process.permission_mode,
+        )?;
         (process.input.clone(), request)
     };
     send(&input, request).await
@@ -338,6 +420,14 @@ fn permission_outcome(decision: &str, options: &[Value]) -> Value {
         Some(id) => json!({"outcome":"selected","optionId":id}),
         None => json!({"outcome":"cancelled"}),
     }
+}
+
+fn auto_permission_outcome(mode: PermissionMode, options: &[Value]) -> Option<Value> {
+    if mode != PermissionMode::Full {
+        return None;
+    }
+    let outcome = permission_outcome("allow", options);
+    (outcome["outcome"] == "selected").then_some(outcome)
 }
 
 #[tauri::command]
@@ -420,7 +510,13 @@ mod tests {
     fn strips_untrusted_transport_and_client_capabilities() {
         let cwd = std::path::Path::new("/tmp/readany");
         let rpc = |method, params| {
-            prepare_request(json!({"id":1,"method":method,"params":params}), cwd, None).unwrap()
+            prepare_request(
+                json!({"id":1,"method":method,"params":params}),
+                cwd,
+                None,
+                PermissionMode::Default,
+            )
+            .unwrap()
         };
         assert_eq!(
             rpc(
@@ -452,5 +548,68 @@ mod tests {
             permission_outcome("deny", &options),
             json!({"outcome":"cancelled"})
         );
+    }
+    #[test]
+    fn permission_profiles_set_policy_without_overriding_user_denials() {
+        let full = PermissionMode::Full.settings();
+        assert_eq!(full["toolPermission"], "always-proceed");
+        assert_eq!(full["enableTerminalSandbox"], false);
+        assert_eq!(full["allowNonWorkspaceAccess"], true);
+        assert!(full.get("permissions").is_none());
+
+        let default = PermissionMode::Default.settings();
+        assert_eq!(default["toolPermission"], "proceed-in-sandbox");
+        assert_eq!(default["enableTerminalSandbox"], true);
+        assert_eq!(default["allowNonWorkspaceAccess"], false);
+
+        let review = PermissionMode::Review.settings();
+        assert_eq!(review["toolPermission"], "request-review");
+        assert!(review["permissions"]["ask"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("command(*)")));
+        assert_eq!(PermissionMode::Auto.settings()["agentMode"], "auto");
+    }
+
+    #[test]
+    fn only_confirmed_full_access_answers_worker_prompts_with_allow_once() {
+        let choices = vec![
+            json!({"kind":"allow_always","optionId":"global"}),
+            json!({"kind":"allow_once","optionId":"once"}),
+            json!({"kind":"reject_once","optionId":"no"}),
+        ];
+        for mode in [
+            PermissionMode::Review,
+            PermissionMode::Default,
+            PermissionMode::Auto,
+        ] {
+            assert!(auto_permission_outcome(mode, &choices).is_none());
+        }
+        assert_eq!(
+            auto_permission_outcome(PermissionMode::Full, &choices),
+            Some(json!({"outcome":"selected","optionId":"once"}))
+        );
+        assert!(auto_permission_outcome(PermissionMode::Full, &choices[..1]).is_none());
+    }
+
+    #[test]
+    fn execution_mode_cannot_outgrow_the_process_profile() {
+        let cwd = std::path::Path::new("/tmp/readany");
+        let configure = |profile, mode| {
+            prepare_request(
+                json!({
+                    "id":1,"method":"session/set_config_option",
+                    "params":{"sessionId":"test","configId":"mode","value":mode},
+                }),
+                cwd,
+                None,
+                profile,
+            )
+        };
+        assert!(configure(PermissionMode::Default, "auto").is_err());
+        assert!(configure(PermissionMode::Default, "accept-edits").is_err());
+        assert!(configure(PermissionMode::Full, "plan").is_err());
+        assert!(configure(PermissionMode::Auto, "auto").is_ok());
+        assert!(configure(PermissionMode::Full, "accept-edits").is_ok());
     }
 }

@@ -1,4 +1,9 @@
 import { citeAgentAnswer } from "@/lib/agents/agent-citations";
+import {
+  ANTIGRAVITY_PERMISSION_PREFERENCE,
+  type AntigravityPermissionMode,
+  isAntigravityPermissionMode,
+} from "@/lib/agents/antigravity-permissions";
 import { AntigravityRuntime } from "@/lib/agents/antigravity-runtime";
 import { CodexRuntime } from "@/lib/agents/codex-runtime";
 import type {
@@ -26,6 +31,7 @@ export interface AgentChat {
   bookId?: string;
   title: string;
   session?: AgentRuntimeSession;
+  permissionMode?: AntigravityPermissionMode;
   messages: Message[];
 }
 
@@ -71,6 +77,10 @@ function useAgentController(
   requestHome: (runtime: ExternalAgent) => void,
 ) {
   const [homeBook, setHomeBook] = useState<string>();
+  const [lastPermissionMode, setLastPermissionMode] = useState<AntigravityPermissionMode>(() => {
+    const stored = localStorage.getItem(ANTIGRAVITY_PERMISSION_PREFERENCE);
+    return isAntigravityPermissionMode(stored) ? stored : "default";
+  });
   const [configuration, setConfiguration] = useState<{
     chatId: string;
     options: AgentConfigOption[];
@@ -91,6 +101,7 @@ function useAgentController(
   const runtime = useRef<{
     client: DesktopAgentRuntime;
     chatId: string;
+    permissionMode: AntigravityPermissionMode;
     session?: AgentRuntimeSession;
   } | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -132,32 +143,93 @@ function useAgentController(
     setSelections((current) => ({ ...current, [bookId ?? ""]: chatId }));
   }
 
+  function findChat(bookId: string | undefined, chatId: string | null) {
+    return historyRef.current.find((record) => record.id === chatId && record.bookId === bookId);
+  }
+
+  function requiresFullConfirmation(bookId: string | undefined, chatId: string | null) {
+    return agent === "antigravity" && lastPermissionMode === "full" && !findChat(bookId, chatId);
+  }
+
   function getChat(bookId: string | undefined, chatId: string | null, title: string): AgentChat {
     return (
-      historyRef.current.find((record) => record.id === chatId && record.bookId === bookId) ?? {
+      findChat(bookId, chatId) ?? {
         id: crypto.randomUUID(),
         bookId,
         title,
+        permissionMode:
+          agent === "antigravity" && lastPermissionMode !== "full" ? lastPermissionMode : undefined,
         messages: [],
       }
     );
   }
 
+  async function setPermission(
+    bookId: string | undefined,
+    chatId: string | null,
+    permissionMode: AntigravityPermissionMode,
+    title: string,
+  ) {
+    if (agent !== "antigravity" || !ready || controller.current || configLock.current) return;
+    configLock.current = true;
+    setConfiguring(true);
+    setError("");
+    const active = findChat(bookId, chatId);
+    try {
+      // A new chat holds a separate confirmation even if Full Access was the last selection.
+      if (active || permissionMode === "full") {
+        const chat = active ?? getChat(bookId, chatId, title);
+        setOperation({ chatId: chat.id, bookId });
+        const running = runtime.current;
+        if (running?.chatId === chat.id && running.permissionMode !== permissionMode) {
+          await running.client.close(running.session);
+          runtime.current = null;
+          setConfiguration(undefined);
+        }
+        const next = [
+          { ...chat, permissionMode },
+          ...historyRef.current.filter((record) => record.id !== chat.id),
+        ];
+        await saveHistory(agent, next);
+        historyRef.current = next;
+        if (mounted.current) {
+          setHistory(next);
+          select(bookId, chat.id);
+        }
+      }
+      localStorage.setItem(ANTIGRAVITY_PERMISSION_PREFERENCE, permissionMode);
+      if (mounted.current) setLastPermissionMode(permissionMode);
+    } catch (error) {
+      if (mounted.current) setError(String(error));
+    } finally {
+      if (mounted.current) setConfiguring(false);
+      configLock.current = false;
+    }
+  }
+
   async function connect(chat: AgentChat, signal: AbortSignal) {
     await startDesktopReadingMcp();
     signal.throwIfAborted();
+    const permissionMode = isAntigravityPermissionMode(chat.permissionMode)
+      ? chat.permissionMode
+      : "default";
     let running = runtime.current;
-    if (!running || running.chatId !== chat.id || !running.client.connected) {
+    if (
+      !running ||
+      running.chatId !== chat.id ||
+      !running.client.connected ||
+      running.permissionMode !== permissionMode
+    ) {
       setConfiguration(undefined);
       if (running) await running.client.close(running.session);
       signal.throwIfAborted();
       const client =
         agent === "codex"
           ? new CodexRuntime()
-          : new AntigravityRuntime((options) => {
+          : new AntigravityRuntime(permissionMode, (options) => {
               if (mounted.current) setConfiguration({ chatId: chat.id, options });
             });
-      running = { client, chatId: chat.id };
+      running = { client, chatId: chat.id, permissionMode };
       runtime.current = running;
       const options = { readingSessionId: chat.id, bookId: chat.bookId };
       if (chat.session) {
@@ -179,7 +251,13 @@ function useAgentController(
   }
 
   async function prepare(bookId: string | undefined, chatId: string | null, title: string) {
-    if (controller.current || configLock.current || !ready) return;
+    if (
+      controller.current ||
+      configLock.current ||
+      !ready ||
+      requiresFullConfirmation(bookId, chatId)
+    )
+      return;
     const abort = new AbortController();
     controller.current = abort;
     const chat = getChat(bookId, chatId, title);
@@ -242,7 +320,13 @@ function useAgentController(
     chatId: string | null;
     quotes?: AttachedQuote[];
   }): Promise<void> {
-    if ((!text.trim() && quotes.length === 0) || controller.current || configLock.current || !ready)
+    if (
+      (!text.trim() && quotes.length === 0) ||
+      controller.current ||
+      configLock.current ||
+      !ready ||
+      requiresFullConfirmation(bookId, chatId)
+    )
       return;
     const abort = new AbortController();
     controller.current = abort;
@@ -411,6 +495,8 @@ function useAgentController(
     configuration,
     configuring,
     setConfig,
+    lastPermissionMode,
+    setPermission,
     stop,
     approve,
     busy,

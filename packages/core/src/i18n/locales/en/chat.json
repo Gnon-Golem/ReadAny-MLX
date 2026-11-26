@@ -1,6 +1,18 @@
 {
   "chat": {
     "codexContinueAtHome": "Continue in main chat",
+    "antigravityPermissions": {
+      "label": "Permissions",
+      "modes": {
+        "review": "Request Review",
+        "default": "Default",
+        "auto": "Auto",
+        "full": "Full Access"
+      },
+      "enableFull": "Enable Full Access",
+      "confirmFull": "Confirm Full Access",
+      "fullDescription": "Antigravity can run commands without the terminal sandbox and access files available to your macOS account, including the library files. This permission is saved for this conversation and restored when you return."
+    },
     "agentConfigure": "Connect to configure",
     "agentRuntime": "Agent runtime",
     "nativeAiMode": "Native AI",

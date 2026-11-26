@@ -2,6 +2,10 @@ import type { AgentRuntimeEvent, AgentRuntimeOptions, AgentRuntimeSession } from
 import { READANY_MCP_TOOLS } from "@readany/core/ai/tools/readany-tool-gateway";
 import { invoke } from "@tauri-apps/api/core";
 import { type UnlistenFn, listen } from "@tauri-apps/api/event";
+import {
+  type AntigravityPermissionMode,
+  antigravityExecutionMode,
+} from "./antigravity-permissions";
 import type { AgentConfigOption, DesktopAgentRuntime } from "./desktop-runtime";
 
 type Obj = Record<string, unknown>;
@@ -46,16 +50,14 @@ function description(tool: Obj): string {
   );
 }
 
-/** Render negotiated choices within the safe modes and model family of a direct ACP client. */
+/** Render model and thinking choices from the ACP response. */
 export function antigravityOptions(value: unknown): AgentConfigOption[] {
   return list(value).flatMap((raw) => {
     const option = object(raw);
     const id = str(option.id);
-    if (option.type !== "select" || !["model", "thought_level", "mode"].includes(id)) return [];
+    if (option.type !== "select" || !["model", "thought_level"].includes(id)) return [];
     const allowed = (value: string) =>
-      value &&
-      (id !== "mode" || ["default", "plan"].includes(value)) &&
-      (id !== "model" || value.toLowerCase().startsWith("gemini-"));
+      value && (id !== "model" || value.toLowerCase().startsWith("gemini-"));
     const options = list(option.options)
       .flatMap((entry) => {
         const item = object(entry);
@@ -93,7 +95,10 @@ export class AntigravityRuntime implements DesktopAgentRuntime {
   private closed = false;
   private closing?: Promise<void>;
 
-  constructor(private readonly configChanged: (options: AgentConfigOption[]) => void = () => {}) {}
+  constructor(
+    private readonly permission: AntigravityPermissionMode = "default",
+    private readonly configChanged: (options: AgentConfigOption[]) => void = () => {},
+  ) {}
 
   get connected(): boolean {
     return Boolean(this.processId && !this.closed);
@@ -113,6 +118,7 @@ export class AntigravityRuntime implements DesktopAgentRuntime {
         readingSessionId: options.readingSessionId,
         bookId: options.bookId,
         tools: READANY_MCP_TOOLS,
+        permissionMode: this.permission,
       },
     });
     if (this.closed) {
@@ -179,10 +185,21 @@ export class AntigravityRuntime implements DesktopAgentRuntime {
     if (expected && actual && actual !== expected)
       throw new Error("Antigravity returned the wrong ACP session.");
     this.sessionId = actual || expected;
-    this.updateOptions(result.configOptions);
-    const mode = this.options.find((option) => option.id === "mode")?.currentValue;
-    if (mode && !["default", "plan"].includes(mode) && this.sessionId)
-      await this.applyConfiguration(this.sessionId, "mode", "default");
+    const mode = list(result.configOptions)
+      .map(object)
+      .find((option) => option.id === "mode");
+    const currentMode = str(mode?.currentValue) || str(object(result.modes).currentModeId);
+    const requiredMode = antigravityExecutionMode(this.permission);
+    if (currentMode !== requiredMode && this.sessionId) {
+      const options = list(mode?.options).map(object);
+      const available = options.some((option) => option.value === requiredMode);
+      if (options.length && !available) {
+        throw new Error(`This Antigravity CLI or account does not support ${requiredMode} mode.`);
+      }
+      await this.applyConfiguration(this.sessionId, "mode", requiredMode);
+    } else {
+      this.updateOptions(result.configOptions);
+    }
     const model = this.options.find((option) => option.id === "model");
     if (model && !model.options.some(({ value }) => value === model.currentValue) && this.sessionId)
       await this.applyConfiguration(this.sessionId, "model", model.options[0].value);
@@ -200,10 +217,14 @@ export class AntigravityRuntime implements DesktopAgentRuntime {
       configId: id,
       value,
     });
-    this.updateOptions(response.configOptions);
-    if (!this.options.some((option) => option.id === id && option.currentValue === value)) {
+    if (
+      !list(response.configOptions)
+        .map(object)
+        .some((option) => option.id === id && option.currentValue === value)
+    ) {
       throw new Error("Antigravity did not apply the selected option.");
     }
+    this.updateOptions(response.configOptions);
   }
 
   async setConfigOption(session: AgentRuntimeSession, id: string, value: string): Promise<void> {

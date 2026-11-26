@@ -9,6 +9,11 @@ import {
 } from "@/components/ui/dialog";
 import { useAgentChats } from "@/hooks/use-agent-chat";
 import { useDesktopCitationNavigation } from "@/hooks/use-desktop-citation-navigation";
+import {
+  ANTIGRAVITY_PERMISSIONS,
+  type AntigravityPermissionMode,
+  isAntigravityPermissionMode,
+} from "@/lib/agents/antigravity-permissions";
 import type { ExternalAgent } from "@/lib/agents/desktop-runtime";
 import {
   type ReaderChatContext,
@@ -61,6 +66,13 @@ export function ExternalAgentChatPanel({
     selection === null
       ? undefined
       : (history.find((record) => record.id === selection) ?? history[0]);
+  const storedPermission = active?.permissionMode;
+  const permissionMode = active
+    ? isAntigravityPermissionMode(storedPermission)
+      ? storedPermission
+      : "default"
+    : chat.lastPermissionMode;
+  const needsFullConfirmation = runtime === "antigravity" && !active && permissionMode === "full";
   const config =
     chat.configuration?.chatId === active?.id ? chat.configuration?.options : undefined;
   const viewingOperation = chat.operation
@@ -209,7 +221,7 @@ export function ExternalAgentChatPanel({
             type="button"
             size="sm"
             variant="outline"
-            disabled={chat.busy || !chat.ready}
+            disabled={chat.busy || !chat.ready || chat.configuring || needsFullConfirmation}
             onClick={() => void chat.prepare(bookId, active?.id ?? null, t("chat.newChat"))}
           >
             {t("chat.agentConfigure")}
@@ -336,12 +348,27 @@ export function ExternalAgentChatPanel({
         </output>
       )}
       <div className="shrink-0 px-4 pb-3 pt-2">
+        {runtime === "antigravity" && (
+          <AntigravityPermissionsControl
+            key={active?.id ?? bookId ?? "global"}
+            mode={permissionMode}
+            needsConfirmation={needsFullConfirmation}
+            disabled={!chat.ready || chat.busy || chat.configuring}
+            onSelect={(mode) =>
+              void chat.setPermission(bookId, active?.id ?? null, mode, t("chat.newChat"))
+            }
+          />
+        )}
         <ChatInput
           onSend={send}
           onStop={chat.stop}
           isStreaming={isStreaming}
           disabled={
-            !chat.ready || (chat.busy && !viewingOperation) || missingSelection || chat.configuring
+            !chat.ready ||
+            (chat.busy && !viewingOperation) ||
+            missingSelection ||
+            chat.configuring ||
+            needsFullConfirmation
           }
           quotes={preview}
           onRemoveQuote={() => {
@@ -353,5 +380,82 @@ export function ExternalAgentChatPanel({
         />
       </div>
     </section>
+  );
+}
+
+function AntigravityPermissionsControl({
+  mode,
+  needsConfirmation,
+  disabled,
+  onSelect,
+}: {
+  mode: AntigravityPermissionMode;
+  needsConfirmation: boolean;
+  disabled: boolean;
+  onSelect: (mode: AntigravityPermissionMode) => void;
+}) {
+  const { t } = useTranslation();
+  const [confirmFull, setConfirmFull] = useState(false);
+
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <label className="flex items-center gap-2">
+        {t("chat.antigravityPermissions.label")}
+        <select
+          value={mode}
+          disabled={disabled}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (!isAntigravityPermissionMode(value)) return;
+            if (value === "full") setConfirmFull(true);
+            else onSelect(value);
+          }}
+          className={`max-w-44 rounded-md border border-border bg-background px-2 py-1 text-sm ${mode === "full" ? "text-destructive" : "text-foreground"}`}
+        >
+          {ANTIGRAVITY_PERMISSIONS.map((permission) => (
+            <option key={permission} value={permission}>
+              {t(`chat.antigravityPermissions.modes.${permission}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {needsConfirmation && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => setConfirmFull(true)}
+        >
+          {t("chat.antigravityPermissions.enableFull")}
+        </Button>
+      )}
+      <Dialog open={confirmFull} onOpenChange={setConfirmFull}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("chat.antigravityPermissions.enableFull")}</DialogTitle>
+            <DialogDescription>
+              {t("chat.antigravityPermissions.fullDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmFull(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={disabled}
+              onClick={() => {
+                onSelect("full");
+                setConfirmFull(false);
+              }}
+            >
+              {t("chat.antigravityPermissions.confirmFull")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

@@ -41,7 +41,7 @@ def options():
     specs = {
         "model": ("Model", ["gemini-fixture", "gemini-fixture-alt", "third-party"]),
         "thought_level": ("Thinking Level", ["low", "high"]),
-        "mode": ("Mode", ["default", "plan", "auto"]),
+        "mode": ("Mode", ["default", "plan", "auto", "accept-edits"]),
     }
     return [
         {"id": key, "name": label, "category": key, "type": "select",
@@ -95,6 +95,11 @@ def say(text):
     for chunk in (text[:midpoint], text[midpoint:]):
         update("agent_message_chunk", content={"type": "text", "text": chunk})
 
+
+if "--settings" in sys.argv:
+    settings = json.loads(sys.argv[sys.argv.index("--settings") + 1])
+    trace("startup", sandbox="--sandbox" in sys.argv, toolPermission=settings["toolPermission"],
+          agentMode=settings.get("agentMode"))
 
 for line in sys.stdin:
     request = json.loads(line)

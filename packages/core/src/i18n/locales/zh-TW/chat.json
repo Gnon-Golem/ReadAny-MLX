@@ -1,6 +1,18 @@
 {
   "chat": {
     "codexContinueAtHome": "在首頁繼續",
+    "antigravityPermissions": {
+      "label": "權限",
+      "modes": {
+        "review": "逐次審核",
+        "default": "預設",
+        "auto": "自動",
+        "full": "完全存取"
+      },
+      "enableFull": "啟用完全存取",
+      "confirmFull": "確認完全存取",
+      "fullDescription": "Antigravity 可以在終端機沙箱之外執行指令，並存取目前 macOS 帳戶有權讀取或修改的檔案，包括書庫檔案。這項權限會為此對話保存，下次開啟時繼續使用。"
+    },
     "agentConfigure": "連線並選取模型",
     "agentRuntime": "執行環境",
     "nativeAiMode": "原生 AI",

@@ -1,6 +1,18 @@
 {
   "chat": {
     "codexContinueAtHome": "在主页继续",
+    "antigravityPermissions": {
+      "label": "权限",
+      "modes": {
+        "review": "逐次审批",
+        "default": "默认",
+        "auto": "自动",
+        "full": "完全访问"
+      },
+      "enableFull": "启用完全访问",
+      "confirmFull": "确认完全访问",
+      "fullDescription": "Antigravity 可在终端沙箱之外运行命令，并访问当前 macOS 账户有权读取或修改的文件，包括书库文件。该权限会为此会话保存，下次打开会继续使用。"
+    },
     "agentConfigure": "连接并选择模型",
     "agentRuntime": "运行时",
     "nativeAiMode": "原生 AI",

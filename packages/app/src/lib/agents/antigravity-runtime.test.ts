@@ -25,6 +25,8 @@ const config = [
     options: [
       { value: "default", name: "Default" },
       { value: "auto", name: "Auto" },
+      { value: "accept-edits", name: "Accept edits" },
+      { value: "plan", name: "Plan" },
     ],
   },
   {
@@ -68,6 +70,13 @@ describe("AntigravityRuntime", () => {
       if (method === "initialize") respond(init);
       if (method === "session/new" || method === "session/load") {
         respond({ sessionId: "s", configOptions: config });
+      }
+      if (method === "session/set_config_option") {
+        respond({
+          configOptions: config.map((option) =>
+            option.id === params.configId ? { ...option, currentValue: params.value } : option,
+          ),
+        });
       }
       if (method === "session/resume")
         packet({ id, error: { code: -32601, message: "Unsupported" } });
@@ -153,9 +162,31 @@ describe("AntigravityRuntime", () => {
     await runtime.close();
   });
 
-  it("uses discovered model choices and excludes auto-approval modes", () => {
+  it("uses discovered model choices and leaves execution modes out of the config UI", () => {
     expect(
       antigravityOptions(config).flatMap(({ options }) => options.map(({ value }) => value)),
-    ).toEqual(["default", "gemini-fixture"]);
+    ).toEqual(["gemini-fixture"]);
+  });
+  it("launches the selected Full Access profile and restores its execution mode instead of Plan", async () => {
+    const runtime = new AntigravityRuntime("full");
+    await runtime.resume(
+      {
+        runtimeId: "antigravity-acp",
+        conversationId: "s",
+        readingSessionId: "local",
+      },
+      { bookId: "book", readingSessionId: "local" },
+    );
+    expect(mock.invoke).toHaveBeenCalledWith("readany_acp_open", {
+      launch: expect.objectContaining({ permissionMode: "full" }),
+    });
+    expect(mock.invoke).toHaveBeenCalledWith("readany_acp_send", {
+      processId: "process",
+      packet: expect.objectContaining({
+        method: "session/set_config_option",
+        params: { sessionId: "s", configId: "mode", value: "accept-edits" },
+      }),
+    });
+    await runtime.close();
   });
 });
