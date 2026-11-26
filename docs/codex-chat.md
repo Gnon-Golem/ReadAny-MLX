@@ -14,7 +14,7 @@
 - EPUB 中选中文字，再点击选区菜单的「AI 提问」。选区会先作为可移除的引用卡出现在输入框，发送时才交给 Codex。可在「选中内容」范围提出问题，或选中内容后直接点发送。
 - 勾选「附上本章划线和笔记」后，下次发问可带上最多五条本章划线和五条笔记的短摘录。翻页只更新本地位置。书籍、章节、选区模式共用该书会话；「全局对话」使用独立历史及无书籍 MCP 的会话。
 - 「在主页继续」保留所选会话和正在生成的消息。在另一会话生成期间仍可浏览历史，发送由同一个 Codex 进程串行处理。切回正在生成的会话可以停止或处理审批。
-- 原生 AI 仍使用当前的模型选择、推理选项、历史和 Parallel。Antigravity 选项预留给后续实现，运行时适配器可遵循共享 `AgentRuntime` 协议。
+- 原生 AI 仍使用当前的模型选择、推理选项、历史和 Parallel。Antigravity 使用独立的 [ACP 运行时](antigravity-acp.md)，对话视图与 Codex 共用同一组件。
 
 ## 数据与生命周期
 
@@ -51,7 +51,7 @@ MacBook Air M5 的签名开发包验证了以下路径。
 | 工具、审批和停止 | Mac 打包应用的可控协议端点返回真实 MCP 证据；拒绝审批传回原请求 ID；停止保留已显示片段 |
 | 索引 | 重复读取前后 `vectors.db` 和 WAL 的校验值一致 |
 
-桌面类型检查通过。桌面 Codex 与上下文测试 5 项、共享 Core 677 项、Expo 20 项通过，Core 有 1 项跳过。Antigravity 还没有运行时实现。Codex 侧栏沿用本机 CLI 的默认模型，原生 AI 继续使用原有模型选择和推理选项。
+桌面类型检查通过。桌面 Codex 与上下文测试 5 项、共享 Core 677 项、Expo 20 项通过，Core 有 1 项跳过。Codex 侧栏沿用本机 CLI 的默认模型，原生 AI 继续使用原有模型选择和推理选项。
 
 用法与侧栏布局参考 [LLM for Zotero](https://github.com/yilewang/llm-for-zotero)。
 
@@ -62,9 +62,9 @@ MacBook Air M5 的签名开发包验证了以下路径。
 | `packages/app/src-tauri/src/codex_app_server.rs` | stdio 生命周期、MCP 配置校验、受限 RPC 和审批响应 |
 | `packages/app/src-tauri/src/reading_mcp.rs` | 内嵌授权生命周期、复用只读工具与证据 |
 | `packages/app/src/lib/agents/codex-runtime.ts` | 线程恢复、流式事件、取消、来源核对 |
-| `packages/app/src/hooks/use-codex-chat.ts` | 会话保存与聊天状态 |
+| `packages/app/src/hooks/use-agent-chat.ts` | 会话保存与聊天状态 |
 | `packages/app/src/components/chat/AgentChatPanel.tsx` | 主页和阅读器共用的运行时入口 |
-| `packages/app/src/components/chat/CodexChatPanel.tsx` | 共用 Codex 对话、历史筛选、阅读范围及审批 UI |
+| `packages/app/src/components/chat/ExternalAgentChatPanel.tsx` | 共用 Codex 对话、历史筛选、阅读范围及审批 UI |
 | `packages/app/src/lib/agents/reader-chat-context.ts` | 发送时选择并限制章节、选区和注释数据 |
 | `packages/app/src/hooks/use-desktop-citation-navigation.ts` | 原生和 Codex 的共享引用跳转 |
 
