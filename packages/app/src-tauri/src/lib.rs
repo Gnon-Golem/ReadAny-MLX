@@ -1,4 +1,6 @@
 #[cfg(target_os = "macos")]
+mod antigravity_acp;
+#[cfg(target_os = "macos")]
 mod codex_app_server;
 mod db;
 mod mlx;
@@ -93,7 +95,9 @@ fn macos_webview_version_reads_the_wkwebview_framework_build() {
 pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(target_os = "macos")]
-    let builder = builder.manage(codex_app_server::CodexHost::default());
+    let builder = builder
+        .manage(codex_app_server::CodexHost::default())
+        .manage(antigravity_acp::AcpHost::default());
     builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -151,6 +155,20 @@ pub fn run() {
             codex_app_server::readany_codex_history_load,
             #[cfg(target_os = "macos")]
             codex_app_server::readany_codex_history_save,
+            #[cfg(target_os = "macos")]
+            antigravity_acp::readany_acp_open,
+            #[cfg(target_os = "macos")]
+            antigravity_acp::readany_acp_send,
+            #[cfg(target_os = "macos")]
+            antigravity_acp::readany_acp_approve,
+            #[cfg(target_os = "macos")]
+            antigravity_acp::readany_acp_evidence,
+            #[cfg(target_os = "macos")]
+            antigravity_acp::readany_acp_close,
+            #[cfg(target_os = "macos")]
+            antigravity_acp::readany_acp_history_load,
+            #[cfg(target_os = "macos")]
+            antigravity_acp::readany_acp_history_save,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -182,6 +200,8 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Exit) {
                 #[cfg(target_os = "macos")]
                 codex_app_server::stop(app);
+                #[cfg(target_os = "macos")]
+                antigravity_acp::stop(app);
                 reading_mcp::stop(app);
             }
         });

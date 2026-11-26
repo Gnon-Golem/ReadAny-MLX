@@ -7,8 +7,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useCodexChat } from "@/hooks/use-codex-chat";
+import { useAgentChats } from "@/hooks/use-agent-chat";
 import { useDesktopCitationNavigation } from "@/hooks/use-desktop-citation-navigation";
+import type { ExternalAgent } from "@/lib/agents/desktop-runtime";
 import {
   type ReaderChatContext,
   type ReaderChatScope,
@@ -26,20 +27,28 @@ import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
 
 interface Props {
+  runtime: ExternalAgent;
   reader?: ReaderChatContext;
   quote?: ReaderQuote;
   onConsumeQuote?: () => void;
   onCitationClick?: (part: CitationPart) => void;
 }
 
-export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick }: Props) {
+export function ExternalAgentChatPanel({
+  runtime,
+  reader,
+  quote,
+  onConsumeQuote,
+  onCitationClick,
+}: Props) {
   const { t } = useTranslation();
   const books = useLibraryStore((state) => state.books);
   const [scope, setScope] = useState<ReaderChatScope>("book");
   const [attached, setAttached] = useState<ReaderQuote>();
   const [includeAnnotations, setIncludeAnnotations] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  const chat = useCodexChat();
+  const chat = useAgentChats().runtimes[runtime];
+  const agent = runtime === "codex" ? "Codex" : "Antigravity";
   const openCitation = useDesktopCitationNavigation();
   const bookId = reader
     ? scope === "global"
@@ -52,7 +61,13 @@ export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick 
     selection === null
       ? undefined
       : (history.find((record) => record.id === selection) ?? history[0]);
-  const viewingOperation = Boolean(active && active.id === chat.operation?.chatId);
+  const config =
+    chat.configuration?.chatId === active?.id ? chat.configuration?.options : undefined;
+  const viewingOperation = chat.operation
+    ? active
+      ? active.id === chat.operation.chatId
+      : chat.busy && chat.operation.bookId === bookId
+    : false;
   const isStreaming = chat.busy && viewingOperation;
   const approvals = isStreaming ? chat.approvals : [];
   const pendingConfirmation = approvals.find((item) => item.requestId === confirmId);
@@ -138,7 +153,7 @@ export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick 
         )}
 
         <select
-          aria-label={t("chat.codexConversation")}
+          aria-label={t("chat.codexConversation", { agent })}
           className="min-w-0 max-w-xs rounded-md border border-border bg-background px-2 py-1.5 text-sm"
           value={active?.id ?? ""}
           disabled={!chat.ready}
@@ -163,8 +178,42 @@ export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick 
             {t("chat.codexContinueAtHome")}
           </button>
         )}
-        {active?.session?.model && (
+        {runtime === "codex" && active?.session?.model && (
           <span className="truncate text-xs text-muted-foreground">{active.session.model}</span>
+        )}
+        {runtime === "antigravity" &&
+          config?.map((option) => (
+            <label
+              key={option.id}
+              className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+            >
+              {option.label}
+              <select
+                className="min-w-0 max-w-40 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                value={option.currentValue}
+                disabled={chat.busy || chat.configuring}
+                onChange={(event) => {
+                  if (active) void chat.setConfig(active.id, option.id, event.target.value);
+                }}
+              >
+                {option.options.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        {runtime === "antigravity" && !config?.length && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={chat.busy || !chat.ready}
+            onClick={() => void chat.prepare(bookId, active?.id ?? null, t("chat.newChat"))}
+          >
+            {t("chat.agentConfigure")}
+          </Button>
         )}
         {reader && scope !== "global" && (
           <label className="flex basis-full items-center gap-2 text-xs text-muted-foreground">
@@ -177,13 +226,13 @@ export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick 
           </label>
         )}
         <p className="basis-full text-xs text-muted-foreground">
-          {t(bookId ? "chat.codexBookSharing" : "chat.codexNativeWeb")}
+          {t(bookId ? "chat.codexBookSharing" : "chat.codexNativeWeb", { agent })}
         </p>
       </div>
 
       {chat.busy && !viewingOperation && (
         <output className="flex flex-wrap items-center gap-2 px-3 py-1 text-xs text-muted-foreground">
-          {t("chat.codexOtherChatRunning")}
+          {t("chat.codexOtherChatRunning", { agent })}
           {chat.operation && (!reader || chat.operation.bookId === bookId) && (
             <button
               type="button"
@@ -218,7 +267,7 @@ export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick 
           role="alert"
           className="mx-4 my-1 rounded-lg border border-border bg-muted/60 p-3"
         >
-          <p className="text-sm font-medium">{t("chat.codexApproval")}</p>
+          <p className="text-sm font-medium">{t("chat.codexApproval", { agent })}</p>
           <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all text-xs">
             {request.description}
           </pre>
@@ -252,7 +301,7 @@ export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick 
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("chat.codexConfirmApproval")}</DialogTitle>
+            <DialogTitle>{t("chat.codexConfirmApproval", { agent })}</DialogTitle>
             <DialogDescription>{t("chat.codexAllowOnce")}</DialogDescription>
           </DialogHeader>
           <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs">
@@ -275,14 +324,15 @@ export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick 
         </DialogContent>
       </Dialog>
 
-      {chat.error && (!chat.ready || viewingOperation) && (
-        <p role="alert" className="px-4 py-1 text-sm text-destructive">
-          {chat.error}
-        </p>
-      )}
+      {chat.error &&
+        (!chat.ready || viewingOperation || (!active && chat.operation?.bookId === bookId)) && (
+          <p role="alert" className="px-4 py-1 text-sm text-destructive">
+            {chat.error}
+          </p>
+        )}
       {isStreaming && chat.stopping && (
         <output className="px-4 py-1 text-xs text-muted-foreground">
-          {t("chat.codexStopping")}
+          {t("chat.codexStopping", { agent })}
         </output>
       )}
       <div className="shrink-0 px-4 pb-3 pt-2">
@@ -290,14 +340,16 @@ export function CodexChatPanel({ reader, quote, onConsumeQuote, onCitationClick 
           onSend={send}
           onStop={chat.stop}
           isStreaming={isStreaming}
-          disabled={!chat.ready || (chat.busy && !viewingOperation) || missingSelection}
+          disabled={
+            !chat.ready || (chat.busy && !viewingOperation) || missingSelection || chat.configuring
+          }
           quotes={preview}
           onRemoveQuote={() => {
             setAttached(undefined);
             setScope("book");
           }}
           showDeepThinking={false}
-          placeholder={t("chat.codexAsk")}
+          placeholder={t("chat.codexAsk", { agent })}
         />
       </div>
     </section>

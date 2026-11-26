@@ -128,9 +128,13 @@ fn installed_codex(app: &AppHandle) -> Result<PathBuf, String> {
         .ok_or("Install the Codex CLI and sign in before starting a Codex chat.".into())
 }
 
-fn workspace(app: &AppHandle, id: Uuid) -> Result<PathBuf, String> {
+pub(crate) fn agent_workspace(
+    app: &AppHandle,
+    root_name: &str,
+    id: Uuid,
+) -> Result<PathBuf, String> {
     use std::os::unix::fs::DirBuilderExt;
-    let root = crate::storage::default_data_root(app)?.join("desktop-codex");
+    let root = crate::storage::default_data_root(app)?.join(root_name);
     let path = root.join(id.to_string());
     for dir in [&root, &path] {
         match std::fs::DirBuilder::new().mode(0o700).create(dir) {
@@ -242,7 +246,7 @@ pub async fn readany_codex_open(
         return Err("Close the active Codex chat first.".into());
     }
     let binary = installed_codex(app)?;
-    let cwd = workspace(app, launch.reading_session_id)?;
+    let cwd = agent_workspace(app, "desktop-codex", launch.reading_session_id)?;
 
     // Config tables are merged by Codex. Disable each enabled inherited server
     // before starting the chat host, then verify the resulting effective table.
@@ -500,20 +504,23 @@ pub fn readany_codex_close(host: tauri::State<'_, CodexHost>, process_id: Uuid) 
     }
 }
 
-fn history_path(window: &WebviewWindow) -> Result<PathBuf, String> {
+pub(crate) fn agent_history_path(
+    window: &WebviewWindow,
+    filename: &str,
+) -> Result<PathBuf, String> {
     let app = window.app_handle();
     if window.label() != "main" || !crate::mlx::is_development_build(app) {
-        return Err("Codex history is unavailable in this window.".into());
+        return Err("Agent history is unavailable in this window.".into());
     }
     let directory = crate::storage::default_data_root(app)?.join("readany-store");
     std::fs::create_dir_all(&directory)
-        .map_err(|_| "Could not open the Codex history directory.")?;
-    Ok(directory.join("codex-chat-history.json"))
+        .map_err(|_| "Could not open the agent history directory.")?;
+    Ok(directory.join(filename))
 }
 
 #[tauri::command]
 pub fn readany_codex_history_load(window: WebviewWindow) -> Result<Vec<Value>, String> {
-    let path = history_path(&window)?;
+    let path = agent_history_path(&window, "codex-chat-history.json")?;
     match std::fs::read(path) {
         Ok(bytes) => {
             serde_json::from_slice(&bytes).map_err(|_| "Invalid saved Codex history.".into())
@@ -528,7 +535,7 @@ pub fn readany_codex_history_save(
     window: WebviewWindow,
     history: Vec<Value>,
 ) -> Result<(), String> {
-    let path = history_path(&window)?;
+    let path = agent_history_path(&window, "codex-chat-history.json")?;
     crate::reading_mcp::write_private_json(&path, &history)
         .map_err(|_| "Could not save the Codex history.".into())
 }

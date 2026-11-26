@@ -5,7 +5,7 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ContextMenu } from "@/components/layout/ContextMenu";
 import { UpdateNotification } from "@/components/layout/UpdateNotification";
-import { CodexChatProvider } from "@/hooks/use-codex-chat";
+import { AgentChatProvider } from "@/hooks/use-agent-chat";
 import { useAutoSync } from "@/hooks/use-sync";
 import { DesktopSyncAdapter } from "@/lib/sync/sync-adapter-desktop";
 import { setSyncAdapter } from "@readany/core/sync";
@@ -19,9 +19,9 @@ export default function App() {
 
   return (
     <>
-      <CodexChatProvider>
+      <AgentChatProvider>
         <AppLayout />
-      </CodexChatProvider>
+      </AgentChatProvider>
       <Toaster position="top-center" richColors duration={2000} />
       <UpdateNotification />
       <ContextMenu />

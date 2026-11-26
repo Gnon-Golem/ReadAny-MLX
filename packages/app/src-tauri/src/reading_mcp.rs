@@ -122,6 +122,7 @@ struct Running {
     task: tauri::async_runtime::JoinHandle<()>,
     descriptor: Option<PathBuf>,
     _lock: std::fs::File,
+    _session_lock: Option<std::fs::File>,
 }
 
 impl Drop for Running {
@@ -142,12 +143,19 @@ impl Drop for Running {
 }
 
 #[derive(Default)]
-pub struct ReadingMcpState(Mutex<Option<Running>>);
+pub struct ReadingMcpState(Mutex<McpListeners>);
+
+#[derive(Default)]
+struct McpListeners {
+    standalone: Option<Running>,
+    embedded: HashMap<Uuid, Running>,
+}
 
 pub fn stop(app: &AppHandle) {
     if let Some(state) = app.try_state::<ReadingMcpState>() {
         if let Ok(mut running) = state.0.lock() {
-            running.take();
+            running.standalone.take();
+            running.embedded.clear();
         }
     }
 }
@@ -251,11 +259,14 @@ pub async fn readany_mcp_start(
             return Ok(false);
         };
         let mut running = state.0.lock().map_err(|_| "MCP state unavailable.")?;
-        if running.is_some() {
+        if running.standalone.is_some() {
             return Ok(true);
         }
+        if !running.embedded.is_empty() {
+            return Err("An embedded ReadAny MCP session is active.".into());
+        }
         let (server, _, _) = start_server(app, tools, grant, true)?;
-        *running = Some(server);
+        running.standalone = Some(server);
         Ok(true)
     }
 }
@@ -276,16 +287,31 @@ fn start_server(
         return Err("Unexpected ReadAny MCP tool list.".into());
     }
     let root = private_root(app)?;
-    let lock = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
-        .open(root.join("server.lock"))
-        .map_err(|err| err.to_string())?;
-    lock.try_lock()
-        .map_err(|_| "Another ReadAny process already provides MCP.")?;
+    let lock_file = |name: &str| {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(root.join(name))
+            .map_err(|err| err.to_string())
+    };
+    let lock = lock_file("server.lock")?;
+    if standalone {
+        lock.try_lock()
+    } else {
+        lock.try_lock_shared()
+    }
+    .map_err(|_| "Another ReadAny process already provides MCP.")?;
+    let session_lock = if standalone {
+        None
+    } else {
+        let lock = lock_file(&format!("embedded-{}.lock", grant.session))?;
+        lock.try_lock()
+            .map_err(|_| "This ReadAny MCP scope is already in use.")?;
+        Some(lock)
+    };
     let snapshot_path = root.join(format!("evidence-{}.json", grant.session));
     let snapshot = restore_snapshot(&snapshot_path, grant.book_id)?;
 
@@ -341,6 +367,7 @@ fn start_server(
             task,
             descriptor,
             _lock: lock,
+            _session_lock: session_lock,
         },
         url,
         token,
@@ -352,6 +379,7 @@ pub(crate) struct EmbeddedMcp {
     pub(crate) url: String,
     pub(crate) token: String,
     server: Arc<Server>,
+    session: Uuid,
 }
 
 #[cfg(target_os = "macos")]
@@ -372,13 +400,18 @@ impl EmbeddedMcp {
         .ok_or("Missing ReadAny book grant.")?;
         let state = app.state::<ReadingMcpState>();
         let mut running = state.0.lock().map_err(|_| "MCP state unavailable.")?;
-        if running.is_some() {
-            return Err("ReadAny MCP is already in use. Reopen ReadAny without external MCP launch parameters.".into());
+        if running.standalone.is_some() || running.embedded.contains_key(&session) {
+            return Err("This ReadAny MCP scope is already in use.".into());
         }
         let (next, url, token) = start_server(app, tools, grant, false)?;
         let server = next.server.clone();
-        *running = Some(next);
-        Ok(Self { url, token, server })
+        running.embedded.insert(session, next);
+        Ok(Self {
+            url,
+            token,
+            server,
+            session,
+        })
     }
 
     pub(crate) async fn evidence(&self, evidence_id: String) -> Result<Value, String> {
@@ -401,10 +434,11 @@ impl Drop for EmbeddedMcp {
         let state = self.server.app.state::<ReadingMcpState>();
         if let Ok(mut running) = state.0.lock() {
             if running
-                .as_ref()
+                .embedded
+                .get(&self.session)
                 .is_some_and(|active| Arc::ptr_eq(&active.server, &self.server))
             {
-                running.take();
+                running.embedded.remove(&self.session);
             }
         };
     }
@@ -421,10 +455,13 @@ pub fn readany_mcp_reply(
         return;
     }
     if let Ok(running) = state.0.lock() {
-        if let Some(running) = running.as_ref() {
-            if let Some((_, sender)) = running.server.replies.remove(&request_id) {
-                let _ = sender.send(reply);
-            }
+        let sender = running
+            .standalone
+            .iter()
+            .chain(running.embedded.values())
+            .find_map(|listener| listener.server.replies.remove(&request_id));
+        if let Some((_, sender)) = sender {
+            let _ = sender.send(reply);
         }
     }
 }

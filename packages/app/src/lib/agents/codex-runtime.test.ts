@@ -1,6 +1,7 @@
 import type { AgentRuntimeEvent } from "@readany/core/ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CodexRuntime, citeCodexAnswer } from "./codex-runtime";
+import { citeAgentAnswer } from "./agent-citations";
+import { CodexRuntime } from "./codex-runtime";
 
 const mock = vi.hoisted(() => ({
   receive: undefined as ((event: { payload: unknown }) => void) | undefined,
@@ -114,7 +115,7 @@ it("links only exact evidence issued for the authorized book", async () => {
     content: "a [[book-1]] b [[book-2]] c [[book-999]]",
     createdAt: 0,
   };
-  const result = await citeCodexAnswer(
+  const result = await citeAgentAnswer(
     message,
     async (id) => ({
       evidenceId: id,

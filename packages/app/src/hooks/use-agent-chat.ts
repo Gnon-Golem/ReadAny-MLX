@@ -1,4 +1,11 @@
-import { CodexRuntime, citeCodexAnswer } from "@/lib/agents/codex-runtime";
+import { citeAgentAnswer } from "@/lib/agents/agent-citations";
+import { AntigravityRuntime } from "@/lib/agents/antigravity-runtime";
+import { CodexRuntime } from "@/lib/agents/codex-runtime";
+import type {
+  AgentConfigOption,
+  DesktopAgentRuntime,
+  ExternalAgent,
+} from "@/lib/agents/desktop-runtime";
 import { startDesktopReadingMcp } from "@/lib/agents/reading-mcp";
 import { useMlxDevelopmentBuild } from "@/lib/macos-mlx-build";
 import type { AgentRuntimeEvent, AgentRuntimeSession } from "@readany/core/ai";
@@ -14,7 +21,7 @@ import {
   useState,
 } from "react";
 
-export interface CodexChat {
+export interface AgentChat {
   id: string;
   bookId?: string;
   title: string;
@@ -24,37 +31,54 @@ export interface CodexChat {
 
 type ApprovalRequest = Extract<AgentRuntimeEvent, { type: "approvalRequested" }>;
 type Step = "thinking" | "tool_calling" | "responding" | "idle";
-let writeQueue = Promise.resolve();
+const writes: Record<ExternalAgent, Promise<void>> = {
+  codex: Promise.resolve(),
+  antigravity: Promise.resolve(),
+};
+const namespace = { codex: "readany_codex", antigravity: "readany_acp" } as const;
 
-function saveHistory(history: CodexChat[]): Promise<void> {
-  const write = writeQueue.then(() => invoke<void>("readany_codex_history_save", { history }));
-  writeQueue = write.catch(() => undefined);
+function saveHistory(agent: ExternalAgent, history: AgentChat[]): Promise<void> {
+  const write = writes[agent].then(() =>
+    invoke<void>(`${namespace[agent]}_history_save`, { history }),
+  );
+  writes[agent] = write.catch(() => undefined);
   return write;
 }
 
-async function loadHistory(): Promise<CodexChat[]> {
-  await writeQueue;
-  const decoded: unknown = await invoke("readany_codex_history_load");
+async function loadHistory(agent: ExternalAgent): Promise<AgentChat[]> {
+  await writes[agent];
+  const decoded: unknown = await invoke(`${namespace[agent]}_history_load`);
+  const runtimeId = agent === "codex" ? "codex-app-server" : "antigravity-acp";
   if (
     !Array.isArray(decoded) ||
     !decoded.every(
-      (record: CodexChat | null) =>
+      (record: AgentChat | null) =>
         record &&
         typeof record.id === "string" &&
         typeof record.title === "string" &&
-        Array.isArray(record.messages),
+        Array.isArray(record.messages) &&
+        (!record.session || record.session.runtimeId === runtimeId),
     )
   ) {
-    throw new Error("Invalid saved Codex history.");
+    throw new Error("Invalid saved agent history.");
   }
   return decoded;
 }
 
-function useCodexController(enabled: boolean) {
+function useAgentController(
+  enabled: boolean,
+  agent: ExternalAgent,
+  requestHome: (runtime: ExternalAgent) => void,
+) {
   const [homeBook, setHomeBook] = useState<string>();
-  const [homeRequest, setHomeRequest] = useState(0);
-  const [history, setHistory] = useState<CodexChat[]>([]);
-  const historyRef = useRef<CodexChat[]>([]);
+  const [configuration, setConfiguration] = useState<{
+    chatId: string;
+    options: AgentConfigOption[];
+  }>();
+  const [configuring, setConfiguring] = useState(false);
+  const configLock = useRef(false);
+  const [history, setHistory] = useState<AgentChat[]>([]);
+  const historyRef = useRef<AgentChat[]>([]);
   const [selections, setSelections] = useState<Record<string, string | null>>({});
   const [operation, setOperation] = useState<{ chatId: string; bookId?: string }>();
   const [busy, setBusy] = useState(false);
@@ -65,7 +89,7 @@ function useCodexController(enabled: boolean) {
   const [error, setError] = useState("");
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const runtime = useRef<{
-    client: CodexRuntime;
+    client: DesktopAgentRuntime;
     chatId: string;
     session?: AgentRuntimeSession;
   } | null>(null);
@@ -76,7 +100,7 @@ function useCodexController(enabled: boolean) {
     if (!enabled) return;
     mounted.current = true;
     let active = true;
-    void loadHistory()
+    void loadHistory(agent)
       .then((items) => {
         if (active) {
           historyRef.current = items;
@@ -95,17 +119,114 @@ function useCodexController(enabled: boolean) {
       runtime.current = null;
       void host?.client.close(host.session);
     };
-  }, [enabled]);
+  }, [enabled, agent]);
 
-  async function persist(chat: CodexChat) {
+  async function persist(chat: AgentChat) {
     const next = [chat, ...historyRef.current.filter((record) => record.id !== chat.id)];
     historyRef.current = next;
     if (mounted.current) setHistory(next);
-    await saveHistory(next);
+    await saveHistory(agent, next);
   }
 
   function select(bookId: string | undefined, chatId: string | null) {
     setSelections((current) => ({ ...current, [bookId ?? ""]: chatId }));
+  }
+
+  function getChat(bookId: string | undefined, chatId: string | null, title: string): AgentChat {
+    return (
+      historyRef.current.find((record) => record.id === chatId && record.bookId === bookId) ?? {
+        id: crypto.randomUUID(),
+        bookId,
+        title,
+        messages: [],
+      }
+    );
+  }
+
+  async function connect(chat: AgentChat, signal: AbortSignal) {
+    await startDesktopReadingMcp();
+    signal.throwIfAborted();
+    let running = runtime.current;
+    if (!running || running.chatId !== chat.id || !running.client.connected) {
+      setConfiguration(undefined);
+      if (running) await running.client.close(running.session);
+      signal.throwIfAborted();
+      const client =
+        agent === "codex"
+          ? new CodexRuntime()
+          : new AntigravityRuntime((options) => {
+              if (mounted.current) setConfiguration({ chatId: chat.id, options });
+            });
+      running = { client, chatId: chat.id };
+      runtime.current = running;
+      const options = { readingSessionId: chat.id, bookId: chat.bookId };
+      if (chat.session) {
+        await client.resume(chat.session, options);
+        running.session = chat.session;
+      } else {
+        running.session = await client.start(options);
+        try {
+          await persist({ ...chat, session: running.session });
+        } catch (error) {
+          await client.close(running.session);
+          throw error;
+        }
+      }
+    }
+    signal.throwIfAborted();
+    if (!running.session) throw new Error("Could not initialize the agent conversation.");
+    return { client: running.client, session: running.session };
+  }
+
+  async function prepare(bookId: string | undefined, chatId: string | null, title: string) {
+    if (controller.current || configLock.current || !ready) return;
+    const abort = new AbortController();
+    controller.current = abort;
+    const chat = getChat(bookId, chatId, title);
+    setOperation({ chatId: chat.id, bookId });
+    setError("");
+    setBusy(true);
+    try {
+      await connect(chat, abort.signal);
+      select(bookId, chat.id);
+    } catch (error) {
+      if (!abort.signal.aborted && mounted.current) setError(String(error));
+    } finally {
+      if (mounted.current) {
+        setBusy(false);
+        setStopping(false);
+      }
+      if (controller.current === abort) controller.current = null;
+    }
+  }
+
+  async function setConfig(chatId: string, id: string, value: string) {
+    const running = runtime.current;
+    if (
+      configLock.current ||
+      controller.current ||
+      running?.chatId !== chatId ||
+      !running?.session ||
+      !running.client.setConfigOption
+    )
+      return;
+    configLock.current = true;
+    setConfiguring(true);
+    const chat = historyRef.current.find((record) => record.id === chatId);
+    setOperation({ chatId, bookId: chat?.bookId });
+    setError("");
+    try {
+      await running.client.setConfigOption(running.session, id, value);
+      if (chat && id === "model") {
+        running.session = { ...running.session, model: value };
+        await persist({ ...chat, session: running.session });
+      }
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      if (mounted.current) setConfiguring(false);
+      configLock.current = false;
+    }
   }
 
   async function send({
@@ -121,7 +242,8 @@ function useCodexController(enabled: boolean) {
     chatId: string | null;
     quotes?: AttachedQuote[];
   }): Promise<void> {
-    if ((!text.trim() && quotes.length === 0) || controller.current || !ready) return;
+    if ((!text.trim() && quotes.length === 0) || controller.current || configLock.current || !ready)
+      return;
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true);
@@ -129,14 +251,9 @@ function useCodexController(enabled: boolean) {
     setError("");
     setApprovals([]);
 
-    let chat = historyRef.current.find(
-      (record) => record.id === chatId && record.bookId === bookId,
-    ) ?? {
-      id: crypto.randomUUID(),
-      bookId,
-      title: (text.trim() || quotes[0]?.text || "").slice(0, 70),
-      messages: [],
-    };
+    let chat = getChat(bookId, chatId, (text.trim() || quotes[0]?.text || "").slice(0, 70));
+    if (chat.messages.length === 0)
+      chat = { ...chat, title: (text.trim() || quotes[0]?.text || chat.title).slice(0, 70) };
     setOperation({ chatId: chat.id, bookId });
     const user: Message = {
       id: crypto.randomUUID(),
@@ -172,30 +289,13 @@ function useCodexController(enabled: boolean) {
       select(bookId, chat.id);
       chat = { ...chat, messages: [...chat.messages, user] };
       await persist(chat);
-      await startDesktopReadingMcp();
-      abort.signal.throwIfAborted();
-
-      let running = runtime.current;
-      if (!running || running.chatId !== chat.id || !running.client.connected) {
-        if (running) await running.client.close(running.session);
-        abort.signal.throwIfAborted();
-        const client = new CodexRuntime();
-        running = { client, chatId: chat.id };
-        runtime.current = running;
-        const options = { readingSessionId: chat.id, bookId: chat.bookId };
-        if (chat.session) {
-          await client.resume(chat.session, options);
-          running.session = chat.session;
-        } else {
-          running.session = await client.start(options);
-          chat = { ...chat, session: running.session };
-          await persist(chat);
-        }
-      }
-
-      abort.signal.throwIfAborted();
-      if (!running.session) throw new Error("Could not initialize the Codex conversation.");
-      for await (const event of running.client.runTurn(running.session, prompt, abort.signal)) {
+      const running = await connect(chat, abort.signal);
+      chat = { ...chat, session: running.session };
+      const request =
+        agent === "antigravity" && chat.bookId
+          ? `For this ReadAny chat, use the authorized ReadAny MCP for book passages. Cite only exact evidence IDs from ReadAny using [[book-1]] marks. Use Antigravity's own tools for public web searches. Keep private book excerpts and notes out of web queries unless I explicitly request it.\n\n${prompt}`
+          : prompt;
+      for await (const event of running.client.runTurn(running.session, request, abort.signal)) {
         switch (event.type) {
           case "textDelta":
           case "textItemCompleted":
@@ -250,7 +350,7 @@ function useCodexController(enabled: boolean) {
       try {
         if (mounted.current && (assistant.content || calls.size)) {
           const active = runtime.current?.client;
-          const completed = await citeCodexAnswer(
+          const completed = await citeAgentAnswer(
             assistant,
             (id) => {
               if (!active) return Promise.reject(new Error("No Codex client."));
@@ -298,16 +398,19 @@ function useCodexController(enabled: boolean) {
   return {
     homeBook,
     setHomeBook,
-    homeRequest,
     showAtHome(bookId: string | undefined) {
       setHomeBook(bookId ?? "");
-      setHomeRequest((value) => value + 1);
+      requestHome(agent);
     },
     history,
     selections,
     operation,
     select,
     send,
+    prepare,
+    configuration,
+    configuring,
+    setConfig,
     stop,
     approve,
     busy,
@@ -320,16 +423,28 @@ function useCodexController(enabled: boolean) {
   };
 }
 
-const CodexChatContext = createContext<ReturnType<typeof useCodexController> | null>(null);
+const AgentChatContext = createContext<{
+  runtimes: Record<ExternalAgent, ReturnType<typeof useAgentController>>;
+  homeRequest: { runtime: ExternalAgent } | null;
+} | null>(null);
 
-export function CodexChatProvider({ children }: { children: ReactNode }) {
+export function AgentChatProvider({ children }: { children: ReactNode }) {
   const enabled = useMlxDevelopmentBuild();
-  const controller = useCodexController(enabled);
-  return createElement(CodexChatContext.Provider, { value: controller }, children);
+  const [homeRequest, setHomeRequest] = useState<{ runtime: ExternalAgent } | null>(null);
+  const requestHome = (runtime: ExternalAgent) => setHomeRequest({ runtime });
+  const codex = useAgentController(enabled, "codex", requestHome);
+  const antigravity = useAgentController(enabled, "antigravity", requestHome);
+  return createElement(
+    AgentChatContext.Provider,
+    {
+      value: { runtimes: { codex, antigravity }, homeRequest },
+    },
+    children,
+  );
 }
 
-export function useCodexChat() {
-  const controller = useContext(CodexChatContext);
-  if (!controller) throw new Error("Codex chat requires its application provider.");
+export function useAgentChats() {
+  const controller = useContext(AgentChatContext);
+  if (!controller) throw new Error("Agent chat requires its application provider.");
   return controller;
 }
