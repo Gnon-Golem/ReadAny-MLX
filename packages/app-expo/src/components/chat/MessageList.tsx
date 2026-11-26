@@ -1,6 +1,8 @@
 import { CheckIcon, ChevronDownIcon, CopyIcon } from "@/components/ui/Icon";
+import { useAnnotationStore } from "@/stores/annotation-store";
 import { fontSize as fs, radius, useColors, withOpacity } from "@/styles/theme";
 import type { ThemeColors } from "@/styles/theme";
+import { saveWebSourceAtBookCitation } from "@readany/core/ai/research/research-note";
 import type { CitationPart, MessageV2, QuotePart, TextPart } from "@readany/core/types/message";
 import * as Clipboard from "expo-clipboard";
 /**
@@ -10,6 +12,7 @@ import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Alert,
   FlatList,
   Keyboard,
   Modal,
@@ -25,6 +28,7 @@ import {
 } from "react-native";
 import { PartRenderer } from "./PartRenderer";
 import { StreamingIndicator } from "./StreamingIndicator";
+import { type ChatCitation, openWebCitation } from "./research-citations";
 
 interface MessageListProps {
   messages: MessageV2[];
@@ -35,7 +39,7 @@ interface MessageListProps {
 
 const BOTTOM_THRESHOLD = 80;
 
-function sortCitationsByIndex(citations: CitationPart[]): CitationPart[] {
+function sortCitationsByIndex(citations: ChatCitation[]): ChatCitation[] {
   return citations
     .map((citation, order) => ({ citation, order }))
     .sort((a, b) => {
@@ -281,13 +285,49 @@ function MessageBubble({
   onLongPress,
 }: MessageBubbleProps) {
   const s = makeStyles(colors);
+  const { t } = useTranslation();
 
   // Extract citations from message parts
   const citations = useMemo(() => {
     return sortCitationsByIndex(
-      message.parts.filter((p): p is CitationPart => p.type === "citation"),
+      message.parts.filter(
+        (p): p is ChatCitation => p.type === "citation" || p.type === "web_citation",
+      ),
     );
   }, [message.parts]);
+
+  const webCitations = citations.filter((part) => part.type === "web_citation");
+  const bookAnchor = citations.find(
+    (part) => part.type === "citation" && part.cfi && part.text?.trim(),
+  );
+  const [savingSource, setSavingSource] = useState<string | null>(null);
+
+  async function saveSource(source: (typeof webCitations)[number]) {
+    if (bookAnchor?.type !== "citation" || savingSource) return;
+    setSavingSource(source.id);
+    try {
+      await saveWebSourceAtBookCitation(source, bookAnchor, {
+        threadId: message.threadId,
+        messageId: message.id,
+      });
+      const notes = useAnnotationStore.getState();
+      await Promise.all([
+        notes.loadAnnotations(bookAnchor.bookId),
+        notes.loadAllHighlightsWithBooks(),
+      ]);
+      Alert.alert(t("research.sourceSaved"));
+    } catch {
+      Alert.alert(t("research.sourceSaveFailed"));
+    } finally {
+      setSavingSource(null);
+    }
+  }
+  const verifiedWebOnly =
+    webCitations.length > 0 ||
+    message.parts.some(
+      (part) =>
+        part.type === "tool_call" && (part.name === "webSearch" || part.name === "webFetch"),
+    );
 
   const triggerLongPress = useCallback(() => {
     if (!onLongPress) return;
@@ -358,9 +398,52 @@ function MessageBubble({
             part={part}
             citations={citations}
             onCitationClick={onCitationClick}
+            verifiedWebOnly={verifiedWebOnly}
           />
         ))}
       </Pressable>
+      {webCitations.length > 0 && (
+        <View style={{ paddingVertical: 6, gap: 3 }}>
+          <Text style={{ color: colors.mutedForeground, fontSize: fs.xs }}>
+            {t("research.sources")}
+          </Text>
+          {citations.map((source) => (
+            <View key={source.id} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => {
+                  if (source.type === "citation") onCitationClick?.(source);
+                  else
+                    void openWebCitation(source).catch(() =>
+                      Alert.alert(t("research.cannotOpenSource")),
+                    );
+                }}
+                style={{ minHeight: 44, justifyContent: "center", flex: 1 }}
+              >
+                <Text style={{ color: colors.primary, fontSize: fs.sm }} numberOfLines={2}>
+                  [{source.citationIndex}]{" "}
+                  {t(source.type === "web_citation" ? "research.webSource" : "research.bookSource")}{" "}
+                  · {source.type === "web_citation" ? source.title : source.chapterTitle}
+                </Text>
+              </Pressable>
+              {source.type === "web_citation" && bookAnchor && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={savingSource !== null}
+                  onPress={() => void saveSource(source)}
+                  style={{ minHeight: 44, justifyContent: "center" }}
+                >
+                  <Text style={{ color: colors.primary, fontSize: fs.xs }}>
+                    {t(
+                      savingSource === source.id ? "research.savingSource" : "research.saveSource",
+                    )}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
       {showGapIndicator && <StreamingIndicator step="thinking" />}
       {!isStreaming && <CopyButton onPress={copyText} colors={colors} />}
     </View>

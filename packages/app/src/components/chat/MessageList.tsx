@@ -1,8 +1,14 @@
+import { publicWebUrl } from "@readany/core/ai/research";
 /**
  * MessageList — scrollable message list with streaming support
  * Uses Part-based rendering for real-time updates
  */
-import type { CitationPart, MessageV2, QuotePart } from "@readany/core/types/message";
+import type {
+  CitationPart,
+  MessageV2,
+  QuotePart,
+  WebCitationPart,
+} from "@readany/core/types/message";
 import { ArrowDown, Check, Copy, Quote } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,7 +26,7 @@ interface MessageListProps {
 /** Threshold (px) to consider the user "at the bottom" */
 const BOTTOM_THRESHOLD = 80;
 
-function sortCitationsByIndex(citations: CitationPart[]): CitationPart[] {
+function sortCitationsByIndex(citations: Array<CitationPart | WebCitationPart>) {
   return citations
     .map((citation, order) => ({ citation, order }))
     .sort((a, b) => {
@@ -239,8 +245,16 @@ function MessageBubble({ message, onCitationClick, isStreaming, currentStep }: M
 
   // Collect all CitationPart objects from the message for reference in text
   const citations = sortCitationsByIndex(
-    message.parts.filter((p) => p.type === "citation") as CitationPart[],
+    message.parts.filter((p) => p.type === "citation" || p.type === "web_citation"),
   );
+
+  const webSources = citations.filter((part) => part.type === "web_citation");
+  const verifiedWebOnly =
+    webSources.length > 0 ||
+    message.parts.some(
+      (part) =>
+        part.type === "tool_call" && (part.name === "webSearch" || part.name === "webFetch"),
+    );
 
   // Show "thinking" indicator in gaps between parts, but NOT when:
   // - A text part is actively streaming (cursor handles that)
@@ -265,8 +279,29 @@ function MessageBubble({ message, onCitationClick, isStreaming, currentStep }: M
           part={part}
           citations={citations}
           onCitationClick={onCitationClick}
+          verifiedWebOnly={verifiedWebOnly}
         />
       ))}
+      {webSources.length > 0 && (
+        <div className="flex flex-col gap-2 text-xs">
+          {webSources.map((source) => {
+            const url = publicWebUrl(source.url);
+            return (
+              url && (
+                <a
+                  key={source.id}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  [{source.citationIndex}] {source.title}
+                </a>
+              )
+            );
+          })}
+        </div>
+      )}
       {showGapIndicator && <StreamingIndicator step="thinking" />}
       {!isStreaming && <CopyMessageButton message={message} />}
     </div>

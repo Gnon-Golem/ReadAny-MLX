@@ -11,6 +11,7 @@ import type {
   ReasoningPart,
   TextPart,
   ToolCallPart,
+  WebCitationPart,
 } from "@readany/core/types/message";
 import { cn } from "@readany/core/utils";
 import {
@@ -72,19 +73,28 @@ function useThrottledText(text: string): string {
 
 interface PartProps {
   part: Part;
-  citations?: CitationPart[];
+  citations?: Array<CitationPart | WebCitationPart>;
+  verifiedWebOnly?: boolean;
   onCitationClick?: (citation: CitationPart) => void;
 }
 
-export function PartRenderer({ part, citations, onCitationClick }: PartProps) {
+export function PartRenderer({ part, citations, onCitationClick, verifiedWebOnly }: PartProps) {
   switch (part.type) {
     case "text":
-      return <TextPartView part={part} citations={citations} onCitationClick={onCitationClick} />;
+      return (
+        <TextPartView
+          part={part}
+          citations={citations}
+          onCitationClick={onCitationClick}
+          verifiedWebOnly={verifiedWebOnly}
+        />
+      );
     case "reasoning":
       return <ReasoningPartView part={part} />;
     case "tool_call":
       return <ToolCallPartView part={part} />;
     case "citation":
+    case "web_citation":
       return null;
     case "mindmap":
       return <MindmapPartView part={part} />;
@@ -99,9 +109,11 @@ function TextPartView({
   part,
   citations,
   onCitationClick,
+  verifiedWebOnly,
 }: {
   part: TextPart;
-  citations?: CitationPart[];
+  citations?: Array<CitationPart | WebCitationPart>;
+  verifiedWebOnly?: boolean;
   onCitationClick?: (citation: CitationPart) => void;
 }) {
   const throttledText = useThrottledText(part.text);
@@ -126,6 +138,7 @@ function TextPartView({
         isStreaming={isStreaming}
         citations={citations}
         onCitationClick={onCitationClick}
+        verifiedWebOnly={verifiedWebOnly}
       />
     </div>
   );
@@ -276,11 +289,7 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
             <div
               className={cn(
                 "flex h-auto w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 hover:bg-muted/50",
-                hasNotice
-                  ? "hover:bg-amber-500/10"
-                  : hasError
-                    ? "hover:bg-destructive/10"
-                    : "",
+                hasNotice ? "hover:bg-amber-500/10" : hasError ? "hover:bg-destructive/10" : "",
               )}
             >
               <div className="flex flex-1 items-center gap-2 overflow-hidden">

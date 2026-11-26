@@ -2,6 +2,7 @@
  * ChatPage — standalone full-page chat for general conversations.
  */
 import { ConfigGuideDialog, type ConfigGuideType } from "@/components/shared/ConfigGuideDialog";
+import { useDesktopResearchOptions } from "@/hooks/use-desktop-research-options";
 import { useStreamingChat } from "@/hooks/use-streaming-chat";
 import { getBook as getBookRecord } from "@/lib/db/database";
 import { openDesktopBook } from "@/lib/library/open-book";
@@ -235,7 +236,10 @@ export function ChatPage() {
   const books = useLibraryStore((s) => s.books);
 
   // /chats page should only use general threads - always pass undefined for bookId
-  const { isStreaming, currentMessage, currentStep, sendMessage, stopStream } = useStreamingChat();
+  const research = useDesktopResearchOptions();
+  const { isStreaming, currentMessage, currentStep, sendMessage, stopStream } = useStreamingChat({
+    research,
+  });
 
   const [showThreads, setShowThreads] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);

@@ -26,12 +26,14 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useStreamingChat } from "@/hooks";
+import { useExpoResearchOptions } from "@/hooks/use-expo-research-options";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
 import { resolveActiveAIConfig } from "@/lib/ai/resolve-active-ai-config";
+import { openMobileBook } from "@/lib/library/open-mobile-book";
 import { useChatStore } from "@/stores/chat-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { getPlatformService } from "@readany/core/services";
-import type { AttachedQuote } from "@readany/core/types";
+import type { AttachedQuote, CitationPart } from "@readany/core/types";
 import {
   convertToMessageV2,
   exportChatAsJSON,
@@ -171,8 +173,9 @@ export function ChatScreen() {
   const generalThreads = getThreadsForContext();
 
   // Streaming chat
+  const research = useExpoResearchOptions();
   const { isStreaming, currentMessage, currentStep, error, sendMessage, stopStream } =
-    useStreamingChat();
+    useStreamingChat({ research });
 
   // Messages - compute directly without useMemo to ensure reactivity
   const activeThread = generalActiveThreadId
@@ -213,6 +216,20 @@ export function ChatScreen() {
       await sendMessage(text, undefined, deepThinking, spoilerFree, quotes, resolvedAIConfig);
     },
     [sendMessage, navigation, t],
+  );
+
+  const handleCitationClick = useCallback(
+    (citation: CitationPart) => {
+      if (!citation.bookId || !citation.cfi) return;
+      void openMobileBook({
+        bookId: citation.bookId,
+        navigation,
+        t,
+        cfi: citation.cfi,
+        highlight: true,
+      });
+    },
+    [navigation, t],
   );
 
   const handleNewThread = useCallback(() => {
@@ -478,6 +495,7 @@ export function ChatScreen() {
                   messages={allMessages}
                   isStreaming={isStreaming}
                   currentStep={currentStep}
+                  onCitationClick={handleCitationClick}
                 />
               ) : (
                 <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>

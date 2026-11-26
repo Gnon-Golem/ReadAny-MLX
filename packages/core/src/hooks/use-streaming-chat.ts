@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { maybeCompressThreadMemory } from "../ai/chat-memory";
+import type { ResearchOptions } from "../ai/research/research-planner";
 import { getBuiltinSkills } from "../ai/skills/builtin-skills";
 import { StreamingChat, createMessageId } from "../ai/streaming";
 import {
@@ -34,13 +35,14 @@ import {
   createReasoningPart,
   createTextPart,
   createToolCallPart,
+  createWebCitationPart,
 } from "../types/message";
 import type { MindmapPart } from "../types/message";
 
 function buildPartsOrder(parts: Part[]) {
   return parts.map((p) => {
     const base = {
-      type: p.type as "text" | "reasoning" | "tool_call" | "citation" | "mindmap",
+      type: p.type as "text" | "reasoning" | "tool_call" | "citation" | "web_citation" | "mindmap",
       id: p.id,
     };
     if (p.type === "text") {
@@ -52,6 +54,17 @@ function buildPartsOrder(parts: Part[]) {
         title: (p as MindmapPart).title,
         markdown: (p as MindmapPart).markdown,
       };
+    }
+    if (p.type === "web_citation") {
+      const {
+        id: _id,
+        type: _type,
+        status: _status,
+        createdAt: _createdAt,
+        updatedAt: _updatedAt,
+        ...webSource
+      } = p;
+      return { ...base, webSource };
     }
     if (p.type === "citation") {
       return {
@@ -84,6 +97,7 @@ export interface StreamingChatOptions {
   book?: Book | null;
   semanticContext?: SemanticContext | null;
   bookId?: string;
+  research?: ResearchOptions;
 }
 
 export interface StreamingState {
@@ -360,6 +374,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
           aiConfig: aiConfigOverride || aiConfig,
           deepThinking,
           spoilerFree,
+          research: options?.research,
           getAvailableTools,
           onToken: (token) => {
             if (!currentTextPart) {
@@ -555,6 +570,10 @@ export function useStreamingChat(options?: StreamingChatOptions) {
             currentReasoningPart.updatedAt = Date.now();
             scheduleCurrentMessage("thinking");
           },
+          onWebCitation: (citation) => {
+            currentParts.push(createWebCitationPart(citation));
+            flushCurrentMessage();
+          },
           onCitation: (citation) => {
             const citationPart = createCitationPart(
               citation.bookId,
@@ -593,6 +612,7 @@ export function useStreamingChat(options?: StreamingChatOptions) {
       options?.book,
       options?.bookId,
       options?.semanticContext,
+      options?.research,
     ],
   );
 

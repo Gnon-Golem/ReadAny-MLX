@@ -498,7 +498,7 @@ describe("streamReadingAgent tool registration", () => {
     );
   });
 
-  it("limits chapter reference resolution to three real attempts per turn", async () => {
+  it("limits repeated chapter resolution and keeps a fourth slot for a different reference", async () => {
     const resolveCalls: string[] = [];
     const resolveTool: ToolDefinition = {
       name: "resolveChapterReference",
@@ -570,10 +570,13 @@ describe("streamReadingAgent tool registration", () => {
     expect(second.matched).toBe(false);
     expect(third.matched).toBe(false);
 
-    const fourth = JSON.parse(await wrappedResolveTool.func({ query: "张三疯那一章讲了什么" }));
-    expect(fourth.attemptLimitReached).toBe(true);
-    expect(fourth.notice).toBe("未能可靠定位章节，请补充更准确的章节名");
-    expect(fourth.attemptedQueries).toEqual(["张三疯那一章讲了什么", "张三疯", "张三疯"]);
+    const repeated = JSON.parse(await wrappedResolveTool.func({ query: "张三疯那一章讲了什么" }));
+    expect(repeated.attemptLimitReached).toBe(true);
+    const fourth = JSON.parse(await wrappedResolveTool.func({ query: "第4章" }));
+    expect(fourth.matched).toBe(false);
+    const fifth = JSON.parse(await wrappedResolveTool.func({ query: "第5章" }));
+    expect(fifth.attemptLimitReached).toBe(true);
+    expect(resolveCalls).toHaveLength(4);
   });
 
   it("keeps RAG fallback available for current-page questions on indexed books", async () => {
@@ -778,9 +781,11 @@ describe("streamReadingAgent tool registration", () => {
     expect(first.totalResults).toBe(1);
     expect(second.totalResults).toBe(1);
     expect(third.totalResults).toBe(1);
-    expect(third.repeatedToolCall).toBe(true);
-    expect(third.stopToolCalls).toBe(true);
-    expect(third.instruction).toContain("Stop calling tools now");
+    expect(third.repeatedToolCall).toBeUndefined();
+    const fourth = JSON.parse(await wrappedSearchTool.func({ query: "主角是谁" }));
+    expect(fourth.repeatedToolCall).toBe(true);
+    expect(fourth.stopToolCalls).toBe(true);
+    expect(fourth.instruction).toContain("Stop calling tools now");
     expect(searchCalls).toEqual(["主角是谁"]);
   });
 });

@@ -71,5 +71,9 @@ if (!cryptoObject.subtle) {
   });
 }
 
-registerRootComponent(App);
+if (process.env.EXPO_PUBLIC_PARALLEL_PROBE === "1") {
+  registerRootComponent(require("./src/research/ParallelProbe").default);
+} else {
+  registerRootComponent(App);
+}
 TrackPlayer.registerPlaybackService(() => PlaybackService);

@@ -2,6 +2,7 @@
  * ChatPanel — book-scoped sidebar chat panel.
  */
 import { ConfigGuideDialog, type ConfigGuideType } from "@/components/shared/ConfigGuideDialog";
+import { useDesktopResearchOptions } from "@/hooks/use-desktop-research-options";
 import { useStreamingChat } from "@/hooks/use-streaming-chat";
 import { useChatStore } from "@/stores/chat-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -53,9 +54,11 @@ export function ChatPanel({ book, onNavigateToCitation }: ChatPanelProps) {
   const getThreadsForContext = useChatStore((s) => s.getThreadsForContext);
 
   // Use streaming chat hook with book context
+  const research = useDesktopResearchOptions();
   const { isStreaming, currentMessage, currentStep, sendMessage, stopStream } = useStreamingChat({
     book: book || null,
     bookId,
+    research,
   });
 
   // Load book threads on mount

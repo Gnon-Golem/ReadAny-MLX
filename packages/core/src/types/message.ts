@@ -47,6 +47,21 @@ export interface CitationPart extends BasePart {
   citationIndex?: number;
 }
 
+export interface WebCitationSource {
+  provider: string;
+  url: string;
+  title: string;
+  excerpt: string;
+  retrievedAt: string;
+  publishedAt?: string;
+  retrievalMethod: "search" | "fetch";
+  citationIndex: number;
+}
+
+export interface WebCitationPart extends BasePart, WebCitationSource {
+  type: "web_citation";
+}
+
 /** A user-attached quote from selected text (used in user messages) */
 export interface QuotePart extends BasePart {
   type: "quote";
@@ -80,6 +95,7 @@ export type Part =
   | ReasoningPart
   | ToolCallPart
   | CitationPart
+  | WebCitationPart
   | QuotePart
   | MindmapPart
   | MermaidPart
@@ -179,6 +195,16 @@ export function createCitationPart(
     cfi,
     text,
     citationIndex,
+    status: "completed",
+    createdAt: Date.now(),
+  };
+}
+
+export function createWebCitationPart(source: WebCitationSource): WebCitationPart {
+  return {
+    ...source,
+    id: `web-citation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type: "web_citation",
     status: "completed",
     createdAt: Date.now(),
   };

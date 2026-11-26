@@ -21,6 +21,12 @@ export interface QueryEmbeddingService {
   provenance?: EmbeddingProvenance;
 }
 
+interface SearchResponse {
+  results: SearchResult[];
+  vectorStatus: "matched" | "no_matches" | "not_requested" | "unavailable";
+  vectorError?: string;
+}
+
 let embeddingService: QueryEmbeddingService | null = null;
 
 /** Configure the embedding service for vector search */
@@ -134,11 +140,20 @@ function clearInvertedIndexCache(): void {
 
 /** Execute a search query against book chunks */
 export async function search(query: SearchQuery): Promise<SearchResult[]> {
+  const { results, vectorStatus, vectorError } = await searchWithDiagnostics(query);
+  if (vectorStatus !== "unavailable") return results;
+  return results.map((result) => ({ ...result, vectorStatus, vectorError }));
+}
+
+/** Report the vector search outcome even when there are no passages to return. */
+export async function searchWithDiagnostics(query: SearchQuery): Promise<SearchResponse> {
   switch (query.mode) {
-    case "vector":
-      return vectorSearch(query);
+    case "vector": {
+      const results = await vectorSearch(query);
+      return { results, vectorStatus: results.length ? "matched" : "no_matches" };
+    }
     case "bm25":
-      return bm25Search(query);
+      return { results: await bm25Search(query), vectorStatus: "not_requested" };
     case "hybrid":
       return hybridSearch(query);
   }
@@ -235,33 +250,35 @@ async function bm25Search(query: SearchQuery): Promise<SearchResult[]> {
 }
 
 /** Hybrid search combining vector and BM25 with RRF fusion */
-async function hybridSearch(query: SearchQuery): Promise<SearchResult[]> {
+async function hybridSearch(query: SearchQuery): Promise<SearchResponse> {
   // Run both searches in parallel with double the topK to get better fusion
   const expandedQuery = { ...query, topK: query.topK * 2 };
 
-  let vectorResults: SearchResult[] = [];
-  let bm25Results: SearchResult[] = [];
+  let vectorResults: SearchResult[];
 
   // Vector search may fail if no embeddings are configured
   try {
     vectorResults = await vectorSearch(expandedQuery);
   } catch (err) {
     console.warn("[Search] Vector search failed, falling back to BM25 only:", err);
-    const vectorError = err instanceof Error ? err.message : String(err);
-    bm25Results = await bm25Search(expandedQuery);
-    return bm25Results.slice(0, query.topK).map((result) => ({
-      ...result,
-      vectorStatus: "unavailable" as const,
-      vectorError,
-    }));
+    const bm25Results = await bm25Search(expandedQuery);
+    return {
+      results: bm25Results.slice(0, query.topK),
+      vectorStatus: "unavailable",
+      vectorError: err instanceof Error ? err.message : String(err),
+    };
   }
 
-  bm25Results = await bm25Search(expandedQuery);
+  const bm25Results = await bm25Search(expandedQuery);
 
-  if (vectorResults.length === 0) return bm25Results.slice(0, query.topK);
-  if (bm25Results.length === 0) return vectorResults.slice(0, query.topK);
+  if (vectorResults.length === 0) {
+    return { results: bm25Results.slice(0, query.topK), vectorStatus: "no_matches" };
+  }
 
-  return rrfFusion(vectorResults, bm25Results, query.topK);
+  const results = bm25Results.length
+    ? rrfFusion(vectorResults, bm25Results, query.topK)
+    : vectorResults;
+  return { results, vectorStatus: "matched" };
 }
 
 /** Reciprocal Rank Fusion — merges results from multiple retrieval methods */

@@ -1,6 +1,7 @@
 /**
  * Settings store — global reading settings, AI config, translation config
  */
+import type { WebResearchMode } from "@readany/core/ai/research";
 import type { AIConfig, AIEndpoint, ReadSettings } from "@readany/core/types";
 import type { TranslationConfig, TranslationTargetLang } from "@readany/core/types/translation";
 import { logAIEndpointDebug, summarizeDebugText } from "@readany/core/ai/request-debug";
@@ -16,6 +17,8 @@ export interface SettingsState {
   readSettings: ReadSettings;
   translationConfig: TranslationConfig;
   aiConfig: AIConfig;
+  webResearchMode: WebResearchMode;
+  setWebResearchMode: (mode: WebResearchMode) => void;
   settingsUpdatedAt: number;
   hasCompletedOnboarding: boolean;
   showOnboardingGuide: boolean;
@@ -86,6 +89,10 @@ const defaultAIConfig: AIConfig = {
 
 function migrateSettingsState(state: SettingsState): SettingsState {
   let next = state;
+  if (state.webResearchMode !== "auto" && state.webResearchMode !== "always" &&
+      state.webResearchMode !== "off") {
+    next = { ...next, webResearchMode: "off" };
+  }
   if (next.aiConfig.maxTokens === 4096) {
     next = {
       ...next,
@@ -444,6 +451,8 @@ export const useSettingsStore = create<SettingsState>()(
       readSettings: defaultReadSettings,
       translationConfig: defaultTranslationConfig,
       aiConfig: defaultAIConfig,
+      webResearchMode: "off",
+      setWebResearchMode: (mode) => set({ webResearchMode: mode }),
       settingsUpdatedAt: 0,
       hasCompletedOnboarding: false,
       showOnboardingGuide: true,
@@ -639,6 +648,7 @@ export const useSettingsStore = create<SettingsState>()(
           readSettings: defaultReadSettings,
           translationConfig: defaultTranslationConfig,
           aiConfig: defaultAIConfig,
+          webResearchMode: "off",
           _apiKeysLoaded: false,
         });
       },

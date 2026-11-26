@@ -1,8 +1,10 @@
+import { publicWebUrl } from "../ai/research/web-provider";
 /**
  * Chat export utilities — shared between web (app) and mobile (app-expo).
  * Supports Markdown, JSON, and plain-text clipboard export.
  */
 import type { MessageV2, Part } from "../types/message";
+import { formatSourceExcerpt, formatWebSourceLink } from "./web-source-format";
 
 /** Options for export functions */
 export interface ChatExportOptions {
@@ -67,6 +69,13 @@ function formatPartMarkdown(part: Part, opts: Required<ChatExportOptions>): stri
       return `> ${label} ${part.text.trim()}${part.chapterTitle ? `  \n> — ${part.chapterTitle}` : ""}`;
     }
 
+    case "web_citation": {
+      if (!opts.includeCitations) return "";
+      const link = formatWebSourceLink(part);
+      if (!link) return "";
+      return `> [${part.citationIndex}] ${link}${part.excerpt ? `  \n> ${formatSourceExcerpt(part.excerpt)}` : ""}`;
+    }
+
     case "mindmap":
       return `### ${part.title || "Mindmap"}\n\n${part.markdown}`;
 
@@ -125,7 +134,8 @@ export function exportChatAsJSON(messages: MessageV2[], options?: ChatExportOpti
         if (p.type === "aborted" && !opts.includeAborted) return false;
         if (p.type === "reasoning" && !opts.includeReasoning) return false;
         if (p.type === "tool_call" && !opts.includeToolCalls) return false;
-        if (p.type === "citation" && !opts.includeCitations) return false;
+        if ((p.type === "citation" || p.type === "web_citation") && !opts.includeCitations)
+          return false;
         return true;
       })
       .map((p) => {
@@ -141,6 +151,18 @@ export function exportChatAsJSON(messages: MessageV2[], options?: ChatExportOpti
             chapterTitle: p.chapterTitle,
             cfi: p.cfi,
             text: p.text,
+          };
+        if (p.type === "web_citation")
+          return {
+            type: "web_citation",
+            url: publicWebUrl(p.url),
+            title: p.title,
+            provider: p.provider,
+            excerpt: p.excerpt,
+            publishedAt: p.publishedAt,
+            retrievedAt: p.retrievedAt,
+            retrievalMethod: p.retrievalMethod,
+            citationIndex: p.citationIndex,
           };
         if (p.type === "mindmap") return { type: "mindmap", title: p.title, markdown: p.markdown };
         if (p.type === "mermaid") return { type: "mermaid", title: p.title, chart: p.chart };
@@ -174,6 +196,10 @@ function extractPartText(part: Part): string {
     }
     case "citation":
       return `[Citation] ${part.text.trim()}`;
+    case "web_citation": {
+      const url = publicWebUrl(part.url);
+      return url ? `[${part.citationIndex}] ${part.title} – ${url}` : "";
+    }
     case "mindmap":
       return part.markdown.trim();
     case "mermaid":
@@ -195,6 +221,8 @@ export function formatChatForClipboard(messages: MessageV2[], options?: ChatExpo
         .filter((p) => {
           if (p.type === "tool_call" && !opts.includeToolCalls) return false;
           if (p.type === "aborted" && !opts.includeAborted) return false;
+          if ((p.type === "citation" || p.type === "web_citation") && !opts.includeCitations)
+            return false;
           return true;
         })
         .map((p) => extractPartText(p))

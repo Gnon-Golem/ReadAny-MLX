@@ -598,5 +598,33 @@
         }
       }
     }
+  },
+  "research": {
+    "sourceSaveFailed": "无法保存此来源",
+    "sourceSaved": "来源已保存至书籍引用位置",
+    "savingSource": "正在保存…",
+    "saveSource": "存到书籍笔记",
+    "cached": "使用缓存",
+    "provider": "搜索服务商 · {{name}}",
+    "settingsTitle": "联网研究",
+    "off": "关闭",
+    "auto": "自动",
+    "always": "强制",
+    "offDescription": "仅使用本地研究工具。",
+    "autoDescription": "书籍聊天中，AI 根据问题和对话上下文决定查书、查网或两者结合。其他聊天按需联网。",
+    "alwaysDescription": "对可公开的问题尝试联网。开启防剧透时，涉及书籍内容的研究仅使用本地资料。",
+    "privacy": "Parallel 会收到简短搜索词或公开网页地址。请避免填写私人信息。匿名服务可能限流。",
+    "budget": "工具额度 · 每轮 {{count}} 次",
+    "budgetDetails": "本地 {{local}} · 章节 {{chapter}} · 章节定位 {{reference}}\n联网搜索 {{search}} · 网页读取 {{fetch}} · 引用来源 {{sources}}",
+    "sources": "来源",
+    "webSource": "网页",
+    "bookSource": "书籍",
+    "searchTool": "联网搜索",
+    "fetchTool": "读取网页",
+    "cannotOpenSource": "无法打开此来源",
+    "rateLimited": "Parallel 当前限流，请稍后重试。",
+    "cancelled": "已取消联网研究。",
+    "timeout": "联网研究超时。",
+    "noSources": "未返回来源"
   }
 }

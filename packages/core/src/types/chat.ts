@@ -1,3 +1,5 @@
+import type { WebCitationSource } from "./message";
+
 /**
  * Chat/conversation types
  * Enhanced with tool calling, reasoning, and citation support
@@ -59,7 +61,7 @@ export interface Message {
 
 /** Records the order of parts as they appeared during streaming */
 export interface PartsOrderEntry {
-  type: "text" | "quote" | "reasoning" | "tool_call" | "citation" | "mindmap";
+  type: "text" | "quote" | "reasoning" | "tool_call" | "citation" | "web_citation" | "mindmap";
   id: string;
   /** For text parts, stores the text content so we can reconstruct separate text segments */
   text?: string;
@@ -69,6 +71,7 @@ export interface PartsOrderEntry {
   chapterIndex?: number;
   cfi?: string;
   citationIndex?: number;
+  webSource?: WebCitationSource;
   title?: string;
   markdown?: string;
 }

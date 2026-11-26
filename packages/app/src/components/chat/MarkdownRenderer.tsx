@@ -1,6 +1,7 @@
+import { publicWebUrl } from "@readany/core/ai/research";
 import { getPlatformService } from "@readany/core/services";
 import { cn } from "@readany/core/utils";
-import type { CitationPart } from "@readany/core/types/message";
+import type { CitationPart, WebCitationPart } from "@readany/core/types/message";
 /**
  * MarkdownRenderer — renders AI markdown responses with:
  * - GitHub Flavored Markdown (tables, strikethrough, task lists, autolinks)
@@ -28,7 +29,7 @@ import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 
 const CitationContext = createContext<{
-  citations?: CitationPart[];
+  citations?: Array<CitationPart | WebCitationPart>;
   onCitationClick?: (citation: CitationPart) => void;
 }>({});
 
@@ -444,6 +445,7 @@ const StaticLink = memo(function StaticLink({
   children,
   ...props
 }: React.ComponentProps<"a">) {
+  if (!href) return <span>{children}</span>;
   return (
     <a
       href={href}
@@ -572,11 +574,14 @@ const MD_COMPONENTS = {
   h6: CitationH6,
 };
 
+const RESEARCH_MARKDOWN_COMPONENTS = { ...MD_COMPONENTS, img: () => null };
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
   isStreaming?: boolean;
-  citations?: CitationPart[];
+  verifiedWebOnly?: boolean;
+  citations?: Array<CitationPart | WebCitationPart>;
   onCitationClick?: (citation: CitationPart) => void;
 }
 
@@ -586,7 +591,7 @@ const rehypePlugins = [rehypeHighlight];
 /** Process text children to find and replace [1], [2] citations with clickable links */
 function processCitationText(
   children: React.ReactNode,
-  citations?: CitationPart[],
+  citations?: Array<CitationPart | WebCitationPart>,
   onCitationClick?: (citation: CitationPart) => void,
 ): React.ReactNode {
   if (!citations || citations.length === 0) {
@@ -597,13 +602,34 @@ function processCitationText(
     if (typeof child === "string") {
       // Split on [1], [2] patterns
       const parts = child.split(/(\[\d+\])/g);
+      let nextOffset = 0;
       return parts.map((part, i) => {
+        const offset = nextOffset;
+        nextOffset += part.length;
         const match = part.match(/\[(\d+)\]/);
         if (match) {
           const num = Number.parseInt(match[1]);
           // Look up by explicit citationIndex first, fall back to array position
-          const citation = citations.find((c) => c.citationIndex === num) ?? citations[num - 1];
-          if (citation) {
+          const citation =
+            citations.find((c) => c.citationIndex === num) ??
+            (citations.some((c) => c.type === "web_citation") ? undefined : citations[num - 1]);
+          if (citation?.type === "web_citation") {
+            const url = publicWebUrl(citation.url);
+            if (url)
+              return (
+                <a
+                  key={`${citation.id}-${offset}`}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary text-xs underline"
+                  title={citation.title}
+                >
+                  [{num}]
+                </a>
+              );
+          }
+          if (citation?.type === "citation") {
             return (
               <button
                 key={i}
@@ -637,6 +663,7 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
   isStreaming,
   citations,
   onCitationClick,
+  verifiedWebOnly = false,
 }: MarkdownRendererProps) {
   // Stable unique id per instance so the streaming cursor CSS is scoped
   const scopeId = useMemo(() => `md-stream-${++mdStreamIdCounter}`, []);
@@ -647,11 +674,27 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
 
   return (
     <CitationContext.Provider value={{ citations, onCitationClick }}>
-      <div className={cn("select-text", className)} data-md-scope={isStreaming ? scopeId : undefined}>
+      <div
+        className={cn("select-text", className)}
+        data-md-scope={isStreaming ? scopeId : undefined}
+      >
         <Markdown
           remarkPlugins={remarkPlugins}
           rehypePlugins={rehypePlugins}
-          components={MD_COMPONENTS}
+          components={verifiedWebOnly ? RESEARCH_MARKDOWN_COMPONENTS : MD_COMPONENTS}
+          urlTransform={
+            verifiedWebOnly
+              ? (value) => {
+                  const url = publicWebUrl(value);
+                  return url &&
+                    citations?.some(
+                      (source) => source.type === "web_citation" && source.url === url,
+                    )
+                    ? url
+                    : "";
+                }
+              : undefined
+          }
         >
           {displayContent}
         </Markdown>

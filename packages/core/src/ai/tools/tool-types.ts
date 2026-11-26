@@ -8,6 +8,7 @@ export interface ToolDefinition {
   description: string;
   parameters: Record<string, ToolParameter>;
   timeoutMs?: number;
+  getCachedResult?: (args: Record<string, unknown>) => unknown;
   execute: (args: Record<string, unknown>) => Promise<unknown>;
 }
 

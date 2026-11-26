@@ -1,6 +1,7 @@
 /**
  * Chat utility functions shared between ChatPage and ChatPanel
  */
+import { publicWebUrl } from "../ai/research/web-provider";
 import type { MessageV2 } from "../types/message";
 
 function parseToolResult(result: unknown): Record<string, unknown> | null {
@@ -15,7 +16,10 @@ function parseToolResult(result: unknown): Record<string, unknown> | null {
   return result && typeof result === "object" ? (result as Record<string, unknown>) : null;
 }
 
-function findCitationIndexFromToolCalls(entry: any, toolCalls: any[] | undefined): number | undefined {
+function findCitationIndexFromToolCalls(
+  entry: any,
+  toolCalls: any[] | undefined,
+): number | undefined {
   if (!toolCalls) return undefined;
   for (const tc of toolCalls) {
     if (tc.name !== "addCitation") continue;
@@ -136,6 +140,21 @@ export function convertToMessageV2(messages: any[]): MessageV2[] {
               createdAt: m.createdAt,
             });
             break;
+          case "web_citation": {
+            const source = entry.webSource;
+            const url = typeof source?.url === "string" ? publicWebUrl(source.url) : undefined;
+            if (url && typeof source.title === "string" && Number.isInteger(source.citationIndex)) {
+              parts.push({
+                ...source,
+                url,
+                id: entry.id,
+                type: "web_citation",
+                status: "completed",
+                createdAt: m.createdAt,
+              });
+            }
+            break;
+          }
           case "mindmap":
             parts.push({
               id: entry.id,
@@ -189,6 +208,14 @@ export function convertToMessageV2(messages: any[]): MessageV2[] {
           createdAt: m.createdAt,
         });
       });
+    }
+
+    // Older records can have a citations column without parts_order.
+    if (Array.isArray(m.citations)) {
+      for (const citation of m.citations) {
+        if (!citation?.bookId || !citation?.cfi) continue;
+        parts.push({ ...citation, type: "citation", status: "completed", createdAt: m.createdAt });
+      }
     }
 
     // Add text part

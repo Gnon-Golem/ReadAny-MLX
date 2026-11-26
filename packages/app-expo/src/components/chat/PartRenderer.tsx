@@ -25,22 +25,32 @@ import {
   View,
 } from "react-native";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import type { ChatCitation } from "./research-citations";
 
 interface PartProps {
   part: Part;
-  citations?: CitationPart[];
+  citations?: ChatCitation[];
+  verifiedWebOnly?: boolean;
   onCitationClick?: (citation: CitationPart) => void;
 }
 
-export function PartRenderer({ part, citations, onCitationClick }: PartProps) {
+export function PartRenderer({ part, citations, onCitationClick, verifiedWebOnly }: PartProps) {
   switch (part.type) {
     case "text":
-      return <TextPartView part={part} citations={citations} onCitationClick={onCitationClick} />;
+      return (
+        <TextPartView
+          part={part}
+          citations={citations}
+          onCitationClick={onCitationClick}
+          verifiedWebOnly={verifiedWebOnly}
+        />
+      );
     case "reasoning":
       return <ReasoningPartView part={part} />;
     case "tool_call":
       return <ToolCallPartView part={part} />;
     case "citation":
+    case "web_citation":
       return null;
     case "mindmap":
       return <MindmapPartView part={part} />;
@@ -65,9 +75,11 @@ function TextPartView({
   part,
   citations,
   onCitationClick,
+  verifiedWebOnly,
 }: {
   part: TextPart;
-  citations?: CitationPart[];
+  citations?: ChatCitation[];
+  verifiedWebOnly?: boolean;
   onCitationClick?: (citation: CitationPart) => void;
 }) {
   const throttledText = useThrottledValue(part.text, 100);
@@ -83,6 +95,7 @@ function TextPartView({
       isStreaming={isStreaming}
       citations={citations}
       onCitationClick={onCitationClick}
+      verifiedWebOnly={verifiedWebOnly}
     />
   );
 }
@@ -189,9 +202,21 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
     }
   };
 
-  const label = TOOL_LABEL_KEYS[part.name] ? t(TOOL_LABEL_KEYS[part.name]) : part.name;
+  const isWeb = part.name === "webSearch" || part.name === "webFetch";
+  const label = isWeb
+    ? t(part.name === "webSearch" ? "research.searchTool" : "research.fetchTool")
+    : TOOL_LABEL_KEYS[part.name]
+      ? t(TOOL_LABEL_KEYS[part.name])
+      : part.name;
   const queryText = part.args.query ? String(part.args.query) : "";
+  const webStatus =
+    isWeb && part.result && typeof part.result === "object"
+      ? (part.result as { code?: string; count?: number; cached?: boolean })
+      : undefined;
   const errorMessage =
+    (webStatus?.code === "rate_limited" ? t("research.rateLimited") : undefined) ||
+    (webStatus?.code === "cancelled" ? t("research.cancelled") : undefined) ||
+    (webStatus?.code === "timeout" ? t("research.timeout") : undefined) ||
     part.error ||
     (part.result && typeof part.result === "object"
       ? String((part.result as Record<string, unknown>).error || "")
@@ -209,6 +234,16 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
             <View style={s.errorBadge}>
               <Text style={s.errorBadgeText}>{t("streaming.toolFailed", "调用失败")}</Text>
             </View>
+          ) : null}
+          {webStatus?.cached && !hasError ? (
+            <Text style={s.queryText} numberOfLines={1}>
+              {t("research.cached")}
+            </Text>
+          ) : null}
+          {webStatus?.count === 0 && !hasError ? (
+            <Text style={s.queryText} numberOfLines={1}>
+              {t("research.noSources")}
+            </Text>
           ) : null}
           {queryText ? (
             <Text style={s.queryText} numberOfLines={1}>
@@ -254,7 +289,9 @@ function ToolCallPartView({ part }: { part: ToolCallPart }) {
           {hasError && (
             <View style={s.errorBlock}>
               <Text style={s.errorTitle}>{t("streaming.toolFailedDetail", "工具调用失败")}</Text>
-              <Text style={s.errorText}>{errorMessage || t("streaming.toolFailed", "调用失败")}</Text>
+              <Text style={s.errorText}>
+                {errorMessage || t("streaming.toolFailed", "调用失败")}
+              </Text>
             </View>
           )}
         </View>
