@@ -1,6 +1,4 @@
-本分支保留上游 ReadAny 基础源码。
-
-[iOS / iPad MLX](https://github.com/Gnon-Golem/ReadAny-MLX/tree/mlx-ios) · [macOS MLX](https://github.com/Gnon-Golem/ReadAny-MLX/tree/macos-mlx) · [macOS Agent](https://github.com/Gnon-Golem/ReadAny-MLX/tree/feat/macos-mlx-agents) · [Downloads / 下载](https://github.com/Gnon-Golem/ReadAny-MLX/tree/downloads)
+[ReadAny-MLX 项目首页](README.md) · [Upstream ReadAny README](README.upstream.md)
 
 <p align="center">
   <img src="packages/app/public/logo.svg" alt="ReadAny Logo" width="120" height="120">
@@ -31,7 +29,7 @@
     <img src="https://img.shields.io/github/license/codedogQBY/ReadAny?color=green" alt="License">
   </a>
   <img src="https://img.shields.io/badge/平台-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-blue" alt="Platform">
-  <a href="README.md">
+  <a href="README.upstream.md">
     <img src="https://img.shields.io/badge/lang-English-blue" alt="English">
   </a>
 </p>
