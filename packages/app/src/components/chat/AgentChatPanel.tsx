@@ -5,23 +5,26 @@ import type { CitationPart } from "@readany/core/types";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalAgentChatPanel } from "./ExternalAgentChatPanel";
-
-type DesktopRuntime = "native" | "codex" | "antigravity";
+import { type ChatRuntime, ModelSelector } from "./ModelSelector";
 
 type Props = {
   reader?: ReaderChatContext;
+  tabId?: string;
   quote?: ReaderQuote;
   onConsumeQuote?: () => void;
   onCitationClick?: (part: CitationPart) => void;
-  renderNative: (quote?: ReaderQuote) => ReactNode;
+  renderNative: (quote?: ReaderQuote, modelSelector?: ReactNode) => ReactNode;
+  readerHeader?: (continueAtHome?: () => void) => ReactNode;
 };
 
 export function AgentChatPanel({
   reader,
+  tabId,
   quote,
   onConsumeQuote,
   onCitationClick,
   renderNative,
+  readerHeader,
 }: Props) {
   const { t } = useTranslation();
   const [supported, setSupported] = useState<boolean>();
@@ -31,7 +34,7 @@ export function AgentChatPanel({
   const { homeRequest } = useAgentChats();
   const insideReader = Boolean(reader);
   const modeKey = insideReader ? "readany-reader-chat-mode" : "readany-chat-mode";
-  const [runtime, setRuntime] = useState<DesktopRuntime>(() => {
+  const [runtime, setRuntime] = useState<ChatRuntime>(() => {
     const mode = localStorage.getItem(modeKey);
     return mode === "codex" || mode === "antigravity" ? mode : "native";
   });
@@ -42,9 +45,18 @@ export function AgentChatPanel({
     }
   }, [insideReader, homeRequest]);
   const showAgent = supported && runtime !== "native";
+  const redesigned = supported && runtime === "antigravity";
+  function changeRuntime(next: ChatRuntime) {
+    setRuntime(next);
+    localStorage.setItem(modeKey, next);
+  }
+  const modelSelector = supported && (
+    <ModelSelector runtime={runtime} onRuntimeChange={changeRuntime} />
+  );
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      {supported && (
+      {!redesigned && readerHeader?.()}
+      {supported && runtime === "codex" && (
         <div className="shrink-0 border-b border-border px-3 py-2">
           <select
             aria-label={t("chat.agentRuntime")}
@@ -53,8 +65,7 @@ export function AgentChatPanel({
             onChange={(event) => {
               const next = event.target.value;
               if (next !== "native" && next !== "codex" && next !== "antigravity") return;
-              setRuntime(next);
-              localStorage.setItem(modeKey, next);
+              changeRuntime(next);
             }}
           >
             <option value="native">{t("chat.nativeAiMode")}</option>
@@ -64,16 +75,22 @@ export function AgentChatPanel({
         </div>
       )}
       <div className={showAgent ? "hidden" : "min-h-0 flex-1 overflow-hidden"}>
-        {renderNative(runtime === "native" || supported === false ? quote : undefined)}
+        {renderNative(
+          runtime === "native" || supported === false ? quote : undefined,
+          modelSelector,
+        )}
       </div>
       {showAgent && (
         <ExternalAgentChatPanel
           key={runtime}
           runtime={runtime}
+          tabId={tabId}
           reader={reader}
           quote={quote}
           onConsumeQuote={onConsumeQuote}
           onCitationClick={onCitationClick}
+          modelSelector={redesigned ? modelSelector : undefined}
+          readerHeader={redesigned ? readerHeader : undefined}
         />
       )}
     </div>

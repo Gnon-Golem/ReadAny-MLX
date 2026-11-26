@@ -7,8 +7,22 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  chatPickerItemClass,
+  chatPickerMenuClass,
+  chatPickerSelectedClass,
+  chatPickerTriggerClass,
+} from "./ChatOptionPicker";
 
-export function ModelSelector() {
+export type ChatRuntime = "native" | "codex" | "antigravity";
+
+export function ModelSelector({
+  runtime = "native",
+  onRuntimeChange,
+}: {
+  runtime?: ChatRuntime;
+  onRuntimeChange?: (runtime: ChatRuntime) => void;
+}) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -39,33 +53,45 @@ export function ModelSelector() {
       : currentModel
     : t("chat.currentModel");
 
-  const canSwitch = totalModels > 1;
+  const canSwitch = Boolean(onRuntimeChange || totalModels > 1);
+  const label = runtime === "antigravity" ? "Antigravity" : displayName;
 
   const handleSelect = (endpointId: string, model: string) => {
     if (endpointId !== activeEndpointId) {
       setActiveEndpoint(endpointId);
     }
     setActiveModel(model);
+    onRuntimeChange?.("native");
     setOpen(false);
   };
 
   return (
-    <div className="relative" ref={popoverRef}>
+    <div className="relative min-w-0" ref={popoverRef}>
       <button
         type="button"
         onClick={() => canSwitch && setOpen(!open)}
-        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground transition-colors ${
+        className={`${chatPickerTriggerClass} ${
           canSwitch ? "cursor-pointer hover:bg-muted hover:text-foreground" : "cursor-default"
         }`}
-        title={currentModel || t("chat.currentModel")}
+        aria-label={onRuntimeChange ? t("chat.modelAndAgent") : undefined}
+        aria-expanded={canSwitch ? open : undefined}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
+        }}
+        title={runtime === "native" ? currentModel || t("chat.currentModel") : label}
       >
-        <span className="max-w-[120px] truncate">{displayName}</span>
+        <span className="max-w-[120px] truncate">{label}</span>
         {canSwitch && <ChevronDown className="size-3 shrink-0" />}
       </button>
 
       {open && canSwitch && (
-        <div className="absolute right-0 top-full z-50 mt-1.5 w-60 rounded-xl border bg-background p-1 shadow-lg">
+        <div className={`absolute right-0 top-full z-50 mt-1.5 w-60 ${chatPickerMenuClass}`}>
           <div className="max-h-72 overflow-y-auto">
+            {onRuntimeChange && endpointsWithModels.length > 0 && (
+              <div className="px-2.5 py-1 text-xs text-muted-foreground">
+                {t("chat.nativeAiMode")}
+              </div>
+            )}
             {endpointsWithModels.map((ep) => (
               <div key={ep.id}>
                 {multipleEndpoints && (
@@ -74,14 +100,15 @@ export function ModelSelector() {
                   </div>
                 )}
                 {ep.models.map((model) => {
-                  const isActive = model === currentModel && ep.id === activeEndpointId;
+                  const isActive =
+                    runtime === "native" && model === currentModel && ep.id === activeEndpointId;
                   return (
                     <button
                       key={`${ep.id}-${model}`}
                       type="button"
                       onClick={() => handleSelect(ep.id, model)}
-                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors ${
-                        isActive ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted"
+                      className={`${chatPickerItemClass} ${
+                        isActive ? chatPickerSelectedClass : "text-foreground hover:bg-muted"
                       }`}
                     >
                       <span className="truncate">{model}</span>
@@ -91,6 +118,24 @@ export function ModelSelector() {
                 })}
               </div>
             ))}
+            {onRuntimeChange && (
+              <div className="mt-1 border-t pt-1">
+                {(["antigravity", "codex"] as const).map((agent) => (
+                  <button
+                    key={agent}
+                    type="button"
+                    onClick={() => {
+                      onRuntimeChange(agent);
+                      setOpen(false);
+                    }}
+                    className={`${chatPickerItemClass} ${agent === runtime ? chatPickerSelectedClass : "hover:bg-muted"}`}
+                  >
+                    {agent === "antigravity" ? "Antigravity" : "Codex"}
+                    {agent === runtime && <Check className="size-3 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

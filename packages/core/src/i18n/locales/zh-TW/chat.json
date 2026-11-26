@@ -1,6 +1,24 @@
 {
   "chat": {
     "codexContinueAtHome": "在首頁繼續",
+    "modelAndAgent": "模型與 Agent",
+    "antigravityModels": "Antigravity 模型",
+    "antigravityModelEffort": "模型與思考強度",
+    "antigravityThinking": "思考強度",
+    "antigravityConnecting": "正在連線…",
+    "antigravityOptionsUnavailable": "暫無模型選項",
+    "antigravityContext": "上下文視窗",
+    "antigravityContextLastReported": "上下文視窗 · 上次用量",
+    "antigravityContextPercent": "{{used}}% 已用 · 剩餘 {{remaining}}%",
+    "antigravityContextTokens": "已用 {{used}} 標記，共 {{size}}",
+    "antigravityContextVisibleText": "已儲存 {{count}} 則訊息 · {{characters}} 字元",
+    "antigravityContextNoReport": "CLI 尚未回報上下文用量",
+    "antigravityEffort": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "extraHigh": "極高"
+    },
     "antigravityPermissions": {
       "label": "權限",
       "modes": {
@@ -11,7 +29,7 @@
       },
       "enableFull": "啟用完全存取",
       "confirmFull": "確認完全存取",
-      "fullDescription": "Antigravity 可以在終端機沙箱之外執行指令，並存取目前 macOS 帳戶有權讀取或修改的檔案，包括書庫檔案。這項權限會為此對話保存，下次開啟時繼續使用。"
+      "fullDescription": "Antigravity 可以在終端機沙箱之外執行指令，並存取目前 macOS 帳戶有權讀取或修改的檔案，包括書庫檔案。這項權限會保存在此對話中，並成為 Antigravity 新對話的預設權限。"
     },
     "agentConfigure": "連線並選取模型",
     "agentRuntime": "執行環境",

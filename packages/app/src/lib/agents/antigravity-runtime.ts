@@ -8,6 +8,11 @@ import {
 } from "./antigravity-permissions";
 import type { AgentConfigOption, DesktopAgentRuntime } from "./desktop-runtime";
 
+export interface AntigravitySelection {
+  model?: string;
+  thoughtLevel?: string;
+}
+
 type Obj = Record<string, unknown>;
 type Decision = "allow" | "deny" | "cancel";
 type Reply = { resolve(value: Obj): void; reject(error: Error): void };
@@ -97,7 +102,9 @@ export class AntigravityRuntime implements DesktopAgentRuntime {
 
   constructor(
     private readonly permission: AntigravityPermissionMode = "default",
-    private readonly configChanged: (options: AgentConfigOption[]) => void = () => {},
+    private readonly configChanged: (options: AgentConfigOption[] | undefined) => void = () => {},
+    private readonly usageChanged: (usage: { used: number; size: number }) => void = () => {},
+    private readonly initialSelection?: AntigravitySelection,
   ) {}
 
   get connected(): boolean {
@@ -200,9 +207,33 @@ export class AntigravityRuntime implements DesktopAgentRuntime {
     } else {
       this.updateOptions(result.configOptions);
     }
+    if (!this.sessionId) return;
     const model = this.options.find((option) => option.id === "model");
-    if (model && !model.options.some(({ value }) => value === model.currentValue) && this.sessionId)
-      await this.applyConfiguration(this.sessionId, "model", model.options[0].value);
+    const preferred = this.initialSelection?.model;
+    const available = model?.options.some(({ value }) => value === preferred);
+    const target = available
+      ? preferred
+      : (model?.options.find(({ value }) => value === model.currentValue)?.value ??
+        model?.options[0].value);
+    if (target && target !== model?.currentValue)
+      await this.applyConfiguration(this.sessionId, "model", target);
+
+    // Model selection can replace the advertised effort choices.
+    const thoughtLevel = this.initialSelection?.thoughtLevel;
+    const effort = this.options.find((option) => option.id === "thought_level");
+    if (
+      thoughtLevel &&
+      (!preferred || available) &&
+      thoughtLevel !== effort?.currentValue &&
+      effort?.options.some(({ value }) => value === thoughtLevel)
+    ) {
+      await this.applyConfiguration(this.sessionId, effort.id, thoughtLevel);
+    }
+  }
+
+  get selection(): AntigravitySelection {
+    const current = (id: string) => this.options.find((option) => option.id === id)?.currentValue;
+    return { model: current("model"), thoughtLevel: current("thought_level") };
   }
 
   private updateOptions(value: unknown) {
@@ -399,6 +430,7 @@ export class AntigravityRuntime implements DesktopAgentRuntime {
   private receive(event: WireEvent) {
     if (!this.processId || event.processId !== this.processId) return;
     if (event.closed) {
+      this.configChanged(undefined);
       void this.closeHost();
       return;
     }
@@ -415,9 +447,25 @@ export class AntigravityRuntime implements DesktopAgentRuntime {
     const params = object(packet.params);
     if (params.sessionId !== this.sessionId) return;
     const update = object(params.update);
-    if (packet.method === "session/update" && update.sessionUpdate === "config_option_update") {
-      this.updateOptions(update.configOptions);
-      return;
+    if (packet.method === "session/update") {
+      if (update.sessionUpdate === "config_option_update") {
+        this.updateOptions(update.configOptions);
+        return;
+      }
+      if (update.sessionUpdate === "usage_update") {
+        const { used, size } = update;
+        if (
+          typeof used === "number" &&
+          Number.isSafeInteger(used) &&
+          used >= 0 &&
+          typeof size === "number" &&
+          Number.isSafeInteger(size) &&
+          size > 0
+        ) {
+          this.usageChanged({ used, size });
+        }
+        return;
+      }
     }
     const turn = this.turn;
     if (!turn || turn.done || params.sessionId !== turn.sessionId) return;

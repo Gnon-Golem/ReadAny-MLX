@@ -223,10 +223,14 @@ function EmptyState({ onSuggestionClick }: { onSuggestionClick: (text: string) =
 }
 
 export function ChatPage() {
-  return <AgentChatPanel renderNative={() => <ApiChatPage />} />;
+  return (
+    <AgentChatPanel
+      renderNative={(_, modelSelector) => <ApiChatPage modelSelector={modelSelector} />}
+    />
+  );
 }
 
-function ApiChatPage() {
+function ApiChatPage({ modelSelector }: { modelSelector?: React.ReactNode }) {
   const { t } = useTranslation();
   const threads = useChatStore((s) => s.threads);
   const initialized = useChatStore((s) => s.initialized);
@@ -365,7 +369,7 @@ function ApiChatPage() {
           )}
         </div>
         <div className="flex items-center gap-0.5">
-          <ModelSelector />
+          {modelSelector || <ModelSelector />}
           <ContextPopover />
           <div className="mx-1 h-4 w-px bg-border" />
           {allMessages.length > 0 && (

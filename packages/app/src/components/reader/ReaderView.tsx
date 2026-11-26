@@ -3153,25 +3153,42 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             onResize={(delta) => chatPanel.handleResize(delta, "left")}
             onResizeEnd={chatPanel.handleResizeEnd}
           />
-          <div className="flex h-10 shrink-0 items-center justify-between border-b border-border/40 px-3">
-            <span className="text-xs font-medium text-foreground">{t("chat.aiAssistant")}</span>
-            <button
-              type="button"
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => setShowChat(false)}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
           <div className="flex-1 overflow-hidden">
             <AgentChatPanel
               reader={readerTab}
+              tabId={tabId}
               quote={chatQuote?.bookId === bookId ? chatQuote : undefined}
               onConsumeQuote={consumeChatQuote}
               onCitationClick={handleNavigateToCitation}
-              renderNative={(quote) => (
+              readerHeader={(continueAtHome) => (
+                <div className="flex h-10 shrink-0 items-center justify-between border-b border-border/40 px-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-xs font-medium text-foreground">
+                      {t("chat.aiAssistant")}
+                    </span>
+                    {continueAtHome && (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-full px-2 py-1 text-xs text-primary hover:bg-muted"
+                        onClick={continueAtHome}
+                      >
+                        {t("chat.codexContinueAtHome")}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    onClick={() => setShowChat(false)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              renderNative={(quote, modelSelector) => (
                 <ChatPanel
                   book={book}
+                  modelSelector={modelSelector}
                   quote={quote}
                   onConsumeQuote={consumeChatQuote}
                   onNavigateToCitation={handleNavigateToCitation}

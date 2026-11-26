@@ -6,44 +6,36 @@ import { useDesktopResearchOptions } from "@/hooks/use-desktop-research-options"
 import { useStreamingChat } from "@/hooks/use-streaming-chat";
 import { useChatStore } from "@/stores/chat-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import { getPlatformService } from "@readany/core/services";
 import type { Book, CitationPart } from "@readany/core/types";
 import {
   convertToMessageV2,
-  exportChatAsJSON,
-  exportChatAsMarkdown,
-  formatChatForClipboard,
-  formatRelativeTimeShort,
-  getExportFilename,
-  getMonthLabel,
-  groupThreadsByTime,
   mergeMessagesWithStreaming,
   providerRequiresApiKey,
 } from "@readany/core/utils";
-import {
-  ClipboardCopy,
-  Download,
-  FileJson,
-  FileText,
-  History,
-  MessageCirclePlus,
-  Trash2,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MessageCirclePlus } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { ChatExportButton } from "./ChatExportButton";
 import { type AttachedQuote, ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
 import { ModelSelector } from "./ModelSelector";
+import { SidebarChatHistory } from "./SidebarChatHistory";
 
 interface ChatPanelProps {
   book?: Book | null;
   quote?: AttachedQuote;
+  modelSelector?: ReactNode;
   onConsumeQuote?: () => void;
   onNavigateToCitation?: (citation: CitationPart) => void;
 }
 
-export function ChatPanel({ book, quote, onConsumeQuote, onNavigateToCitation }: ChatPanelProps) {
+export function ChatPanel({
+  book,
+  quote,
+  modelSelector,
+  onConsumeQuote,
+  onNavigateToCitation,
+}: ChatPanelProps) {
   const { t } = useTranslation();
   const bookId = book?.id;
 
@@ -81,36 +73,8 @@ export function ChatPanel({ book, quote, onConsumeQuote, onNavigateToCitation }:
     }
   }, [activeThreadId, bookId, firstBookThreadId, setBookActiveThread]);
 
-  const [showThreadList, setShowThreadList] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
   const [attachedQuotes, setAttachedQuotes] = useState<AttachedQuote[]>([]);
   const [configGuide, setConfigGuide] = useState<ConfigGuideType>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close popover on outside click
-  useEffect(() => {
-    if (!showThreadList) return;
-    const handler = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setShowThreadList(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showThreadList]);
-
-  // Close export menu on outside click
-  useEffect(() => {
-    if (!showExportMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-        setShowExportMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showExportMenu]);
 
   const handleSend = useCallback(
     (content: string, deepThinking = false, spoilerFree = false, quotes?: AttachedQuote[]) => {
@@ -152,7 +116,6 @@ export function ChatPanel({ book, quote, onConsumeQuote, onNavigateToCitation }:
       if (bookId) {
         setBookActiveThread(bookId, threadId);
       }
-      setShowThreadList(false);
     },
     [bookId, setBookActiveThread],
   );
@@ -174,41 +137,6 @@ export function ChatPanel({ book, quote, onConsumeQuote, onNavigateToCitation }:
 
   const exportTitle = activeThread?.title || book?.meta?.title || t("chat.aiAssistant");
 
-  const exportOpts = useMemo(
-    () => ({
-      title: exportTitle,
-      userLabel: t("chat.roleUser"),
-      aiLabel: t("chat.roleAI"),
-    }),
-    [exportTitle, t],
-  );
-
-  const handleExportMarkdown = useCallback(async () => {
-    setShowExportMenu(false);
-    const md = exportChatAsMarkdown(allMessages, exportOpts);
-    const filename = getExportFilename("md");
-    const platform = getPlatformService();
-    await platform.shareOrDownloadFile(md, filename, "text/markdown");
-    toast.success(t("chat.exportSuccess"));
-  }, [allMessages, exportOpts, t]);
-
-  const handleExportJSON = useCallback(async () => {
-    setShowExportMenu(false);
-    const json = exportChatAsJSON(allMessages, exportOpts);
-    const filename = getExportFilename("json");
-    const platform = getPlatformService();
-    await platform.shareOrDownloadFile(json, filename, "application/json");
-    toast.success(t("chat.exportSuccess"));
-  }, [allMessages, exportOpts, t]);
-
-  const handleCopyAll = useCallback(async () => {
-    setShowExportMenu(false);
-    const text = formatChatForClipboard(allMessages, exportOpts);
-    const platform = getPlatformService();
-    await platform.copyToClipboard(text);
-    toast.success(t("chat.copiedSuccess"));
-  }, [allMessages, exportOpts, t]);
-
   const SUGGESTIONS = [
     t("chat.suggestions.summarizeChapter"),
     t("chat.suggestions.explainConcepts"),
@@ -219,66 +147,15 @@ export function ChatPanel({ book, quote, onConsumeQuote, onNavigateToCitation }:
     <div className="flex h-full flex-col">
       {/* Header with thread controls */}
       <div className="relative flex h-8 shrink-0 items-center justify-between px-3">
-        <button
-          type="button"
-          onClick={() => setShowThreadList(!showThreadList)}
-          className={`flex items-center gap-1 rounded-full p-1 transition-colors ${
-            showThreadList
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
-          }`}
-          title={t("chat.history")}
-        >
-          <History className="size-3.5" />
-          {bookThreads.length > 1 && <span className="text-[10px]">{bookThreads.length}</span>}
-        </button>
+        <SidebarChatHistory
+          threads={bookThreads}
+          activeId={activeThreadId}
+          onSelect={handleSelectThread}
+          onDelete={handleDeleteThread}
+        />
         <div className="flex items-center gap-1">
-          <ModelSelector />
-          {allMessages.length > 0 && (
-            <div className="relative" ref={exportMenuRef}>
-              <button
-                type="button"
-                onClick={() => setShowExportMenu(!showExportMenu)}
-                className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                title={t("chat.export")}
-              >
-                <Download className="size-3.5" />
-              </button>
-              {showExportMenu && (
-                <div className="absolute right-0 top-full z-50 mt-1 min-w-48 animate-in fade-in slide-in-from-top-1 rounded-lg border bg-popover p-1.5 shadow-lg">
-                  <button
-                    type="button"
-                    onClick={handleExportMarkdown}
-                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-foreground hover:bg-muted"
-                  >
-                    <FileText className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="flex-1 whitespace-nowrap text-left">
-                      {t("chat.exportMarkdown")}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExportJSON}
-                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-foreground hover:bg-muted"
-                  >
-                    <FileJson className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="flex-1 whitespace-nowrap text-left">
-                      {t("chat.exportJSON")}
-                    </span>
-                  </button>
-                  <div className="mx-2 my-1 border-t" />
-                  <button
-                    type="button"
-                    onClick={handleCopyAll}
-                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-foreground hover:bg-muted"
-                  >
-                    <ClipboardCopy className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="flex-1 whitespace-nowrap text-left">{t("chat.copyAll")}</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          {modelSelector || <ModelSelector />}
+          <ChatExportButton messages={allMessages} title={exportTitle} />
           <button
             type="button"
             onClick={handleNewThread}
@@ -288,112 +165,6 @@ export function ChatPanel({ book, quote, onConsumeQuote, onNavigateToCitation }:
             <MessageCirclePlus className="size-3.5" />
           </button>
         </div>
-
-        {/* Thread list popover */}
-        {showThreadList && (
-          <div
-            ref={popoverRef}
-            className="absolute left-1 right-1 top-8 z-50 animate-in fade-in slide-in-from-top-1 duration-150 rounded-lg border border-border/60 bg-background shadow-lg"
-          >
-            <div className="max-h-56 space-y-1 overflow-y-auto p-1.5">
-              {bookThreads.length === 0 ? (
-                <p className="py-4 text-center text-xs text-muted-foreground">
-                  {t("chat.noConversations")}
-                </p>
-              ) : (
-                (() => {
-                  const grouped = groupThreadsByTime(bookThreads);
-                  const sections: { key: string; label: string; threads: typeof bookThreads }[] = [
-                    { key: "today", label: t("chat.today"), threads: grouped.today },
-                    { key: "yesterday", label: t("chat.yesterday"), threads: grouped.yesterday },
-                    { key: "last7Days", label: t("chat.last7Days"), threads: grouped.last7Days },
-                    { key: "last30Days", label: t("chat.last30Days"), threads: grouped.last30Days },
-                  ];
-
-                  const olderByMonth = new Map<string, typeof bookThreads>();
-                  for (const thread of grouped.older) {
-                    const monthLabel = getMonthLabel(thread.updatedAt);
-                    if (!olderByMonth.has(monthLabel)) {
-                      olderByMonth.set(monthLabel, []);
-                    }
-                    const monthThreads = olderByMonth.get(monthLabel);
-                    if (monthThreads) {
-                      monthThreads.push(thread);
-                    }
-                  }
-                  const sortedMonths = [...olderByMonth.keys()].sort((a, b) => b.localeCompare(a));
-                  for (const month of sortedMonths) {
-                    const monthThreads = olderByMonth.get(month);
-                    if (monthThreads) {
-                      sections.push({ key: month, label: month, threads: monthThreads });
-                    }
-                  }
-
-                  return sections.map(({ key, label, threads }) => {
-                    if (threads.length === 0) return null;
-                    return (
-                      <div key={key}>
-                        <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground">
-                          {label}
-                        </div>
-                        {threads.map((thread) => {
-                          const lastMsg =
-                            thread.messages.length > 0
-                              ? thread.messages[thread.messages.length - 1]
-                              : null;
-                          const preview = lastMsg?.content?.slice(0, 60) || "";
-                          return (
-                            <div
-                              key={thread.id}
-                              className={`group flex cursor-pointer items-start gap-2 rounded-md px-2.5 py-2 transition-colors ${
-                                thread.id === activeThreadId
-                                  ? "bg-primary/10 text-primary"
-                                  : "text-foreground hover:bg-muted"
-                              }`}
-                              onClick={() => handleSelectThread(thread.id)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  handleSelectThread(thread.id);
-                                }
-                              }}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="truncate text-xs font-medium">
-                                    {thread.title || t("chat.newChat")}
-                                  </span>
-                                  <span className="shrink-0 text-[10px] text-muted-foreground/50">
-                                    {formatRelativeTimeShort(thread.updatedAt, t)}
-                                  </span>
-                                </div>
-                                {preview && (
-                                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                                    {preview}
-                                  </p>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteThread(thread.id);
-                                }}
-                                className="mt-0.5 hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-hover:block"
-                              >
-                                <Trash2 className="size-3" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  });
-                })()
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Messages or empty state */}

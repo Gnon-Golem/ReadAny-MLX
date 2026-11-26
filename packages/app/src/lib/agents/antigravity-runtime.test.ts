@@ -167,6 +167,91 @@ describe("AntigravityRuntime", () => {
       antigravityOptions(config).flatMap(({ options }) => options.map(({ value }) => value)),
     ).toEqual(["gemini-fixture"]);
   });
+  it("keeps the current model's advertised effort choices", () => {
+    const four = ["low", "medium", "high", "xhigh"].map((value) => ({ value, name: value }));
+    const option = { type: "select", id: "thought_level", currentValue: "high", options: four };
+    expect(antigravityOptions([option])[0]?.options.map(({ value }) => value)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(antigravityOptions([{ ...option, options: four.slice(0, 2) }])[0]?.options).toHaveLength(
+      2,
+    );
+  });
+
+  it("reports valid context usage only for the current ACP session", async () => {
+    const usageChanged = vi.fn();
+    const runtime = new AntigravityRuntime("default", undefined, usageChanged);
+    await runtime.start({ readingSessionId: "local" });
+    const update = (sessionId: string, used: number, size: number) =>
+      packet({
+        method: "session/update",
+        params: { sessionId, update: { sessionUpdate: "usage_update", used, size } },
+      });
+    update("foreign", 5, 10);
+    update("s", 5, 0);
+    update("s", -1, 30);
+    update("s", 18, 45);
+    expect(usageChanged).toHaveBeenCalledExactlyOnceWith({ used: 18, size: 45 });
+    await runtime.close();
+  });
+
+  it("opens a session with the remembered model, then applies effort advertised by that model", async () => {
+    const availableModels = {
+      ...config[1],
+      options: [{ value: "gemini-fixture" }, { value: "gemini-hydrogen" }],
+    };
+    const effort = (levels: string[], currentValue: string) => ({
+      id: "thought_level",
+      type: "select",
+      currentValue,
+      options: levels.map((value) => ({ value })),
+    });
+    const choices = ["low", "medium", "high", "xhigh"];
+    const changes: unknown[] = [];
+    mock.invoke.mockImplementation(async (command, payload) => {
+      if (command === "readany_acp_open") return { processId: "process" };
+      if (command !== "readany_acp_send") return;
+      const { id, method, params } = payload.packet;
+      if (method === "initialize") packet({ id, result: init });
+      if (method === "session/new")
+        packet({
+          id,
+          result: {
+            sessionId: "s",
+            configOptions: [config[0], availableModels, effort(["low"], "low")],
+          },
+        });
+      if (method === "session/set_config_option") {
+        changes.push([params.configId, params.value]);
+        packet({
+          id,
+          result: {
+            configOptions: [
+              config[0],
+              { ...availableModels, currentValue: "gemini-hydrogen" },
+              effort(choices, params.configId === "thought_level" ? params.value : "medium"),
+            ],
+          },
+        });
+      }
+    });
+    const runtime = new AntigravityRuntime("default", undefined, undefined, {
+      model: "gemini-hydrogen",
+      thoughtLevel: "xhigh",
+    });
+    const session = await runtime.start({ readingSessionId: "local" });
+    expect(session.model).toBe("gemini-hydrogen");
+    expect(changes).toEqual([
+      ["model", "gemini-hydrogen"],
+      ["thought_level", "xhigh"],
+    ]);
+    expect(runtime.selection).toEqual({ model: "gemini-hydrogen", thoughtLevel: "xhigh" });
+    await runtime.close();
+  });
+
   it("launches the selected Full Access profile and restores its execution mode instead of Plan", async () => {
     const runtime = new AntigravityRuntime("full");
     await runtime.resume(

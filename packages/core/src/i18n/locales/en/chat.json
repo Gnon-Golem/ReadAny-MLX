@@ -1,6 +1,25 @@
 {
   "chat": {
     "codexContinueAtHome": "Continue in main chat",
+    "modelAndAgent": "Model and Agent",
+    "antigravityModels": "Antigravity models",
+    "antigravityModelEffort": "Model and thinking effort",
+    "antigravityThinking": "Thinking effort",
+    "antigravityConnecting": "Connecting…",
+    "antigravityOptionsUnavailable": "Model options unavailable",
+    "antigravityContext": "Context window",
+    "antigravityContextLastReported": "Context window · Last reported",
+    "antigravityContextPercent": "{{used}}% used · {{remaining}}% remaining",
+    "antigravityContextTokens": "{{used}} tokens used of {{size}}",
+    "antigravityContextVisibleText_one": "{{count}} message in ReadAny · {{characters}} characters",
+    "antigravityContextVisibleText_other": "{{count}} messages in ReadAny · {{characters}} characters",
+    "antigravityContextNoReport": "CLI has not reported context usage",
+    "antigravityEffort": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "extraHigh": "Extra high"
+    },
     "antigravityPermissions": {
       "label": "Permissions",
       "modes": {
@@ -11,7 +30,7 @@
       },
       "enableFull": "Enable Full Access",
       "confirmFull": "Confirm Full Access",
-      "fullDescription": "Antigravity can run commands without the terminal sandbox and access files available to your macOS account, including the library files. This permission is saved for this conversation and restored when you return."
+      "fullDescription": "Antigravity can run commands without the terminal sandbox and access files available to your macOS account, including the library files. This permission is saved for this conversation and becomes the default for new Antigravity chats."
     },
     "agentConfigure": "Connect to configure",
     "agentRuntime": "Agent runtime",

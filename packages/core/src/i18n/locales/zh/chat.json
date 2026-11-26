@@ -1,6 +1,24 @@
 {
   "chat": {
     "codexContinueAtHome": "在主页继续",
+    "modelAndAgent": "模型与 Agent",
+    "antigravityModels": "Antigravity 模型",
+    "antigravityModelEffort": "模型与思考强度",
+    "antigravityThinking": "思考强度",
+    "antigravityConnecting": "正在连接…",
+    "antigravityOptionsUnavailable": "暂无模型选项",
+    "antigravityContext": "上下文窗口",
+    "antigravityContextLastReported": "上下文窗口 · 上次用量",
+    "antigravityContextPercent": "{{used}}% 已用 · 剩余 {{remaining}}%",
+    "antigravityContextTokens": "已用 {{used}} 标记，共 {{size}}",
+    "antigravityContextVisibleText": "已保存 {{count}} 条消息 · {{characters}} 字符",
+    "antigravityContextNoReport": "CLI 尚未上报上下文用量",
+    "antigravityEffort": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "extraHigh": "极高"
+    },
     "antigravityPermissions": {
       "label": "权限",
       "modes": {
@@ -11,7 +29,7 @@
       },
       "enableFull": "启用完全访问",
       "confirmFull": "确认完全访问",
-      "fullDescription": "Antigravity 可在终端沙箱之外运行命令，并访问当前 macOS 账户有权读取或修改的文件，包括书库文件。该权限会为此会话保存，下次打开会继续使用。"
+      "fullDescription": "Antigravity 可在终端沙箱之外运行命令，并访问当前 macOS 账户有权读取或修改的文件，包括书库文件。该权限会保存在此会话中，并成为 Antigravity 新会话的默认权限。"
     },
     "agentConfigure": "连接并选择模型",
     "agentRuntime": "运行时",

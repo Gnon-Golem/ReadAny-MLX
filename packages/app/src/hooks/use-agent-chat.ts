@@ -1,10 +1,16 @@
 import { citeAgentAnswer } from "@/lib/agents/agent-citations";
 import {
+  type AntigravityContextUsage,
+  clearAntigravityContextUsage,
+  readAntigravityContextUsage,
+  saveAntigravityContextUsage,
+} from "@/lib/agents/antigravity-context-usage";
+import {
   ANTIGRAVITY_PERMISSION_PREFERENCE,
   type AntigravityPermissionMode,
   isAntigravityPermissionMode,
 } from "@/lib/agents/antigravity-permissions";
-import { AntigravityRuntime } from "@/lib/agents/antigravity-runtime";
+import { AntigravityRuntime, type AntigravitySelection } from "@/lib/agents/antigravity-runtime";
 import { CodexRuntime } from "@/lib/agents/codex-runtime";
 import type {
   AgentConfigOption,
@@ -30,9 +36,31 @@ export interface AgentChat {
   id: string;
   bookId?: string;
   title: string;
+  updatedAt?: number;
   session?: AgentRuntimeSession;
   permissionMode?: AntigravityPermissionMode;
+  thoughtLevel?: string;
   messages: Message[];
+}
+
+const antigravitySelectionKey = "readany-antigravity-last-config";
+
+function lastAntigravitySelection(history: AgentChat[]): AntigravitySelection | undefined {
+  try {
+    const saved = JSON.parse(localStorage.getItem(antigravitySelectionKey) ?? "null");
+    if (typeof saved?.model === "string" && saved.model) {
+      return {
+        model: saved.model,
+        thoughtLevel: typeof saved.thoughtLevel === "string" ? saved.thoughtLevel : undefined,
+      };
+    }
+  } catch {
+    // Older or invalid preferences can be recovered from the latest conversation.
+  }
+  const previous = history.find((chat) => chat.session?.model);
+  return previous
+    ? { model: previous.session?.model, thoughtLevel: previous.thoughtLevel }
+    : undefined;
 }
 
 type ApprovalRequest = Extract<AgentRuntimeEvent, { type: "approvalRequested" }>;
@@ -85,11 +113,34 @@ function useAgentController(
     chatId: string;
     options: AgentConfigOption[];
   }>();
+  const [contextUsage, setContextUsage] = useState<{
+    chatId: string;
+    model: string;
+    usage: AntigravityContextUsage;
+  }>();
   const [configuring, setConfiguring] = useState(false);
   const configLock = useRef(false);
   const [history, setHistory] = useState<AgentChat[]>([]);
   const historyRef = useRef<AgentChat[]>([]);
-  const [selections, setSelections] = useState<Record<string, string | null>>({});
+  const [selections, setSelections] = useState<Record<string, string | null>>(() => {
+    if (agent !== "antigravity") return {};
+    try {
+      const value: unknown = JSON.parse(
+        localStorage.getItem("readany-antigravity-selected-chats") || "{}",
+      );
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? Object.fromEntries(
+            Object.entries(value).filter(([, id]) => id === null || typeof id === "string"),
+          )
+        : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    if (agent === "antigravity")
+      localStorage.setItem("readany-antigravity-selected-chats", JSON.stringify(selections));
+  }, [agent, selections]);
   const [operation, setOperation] = useState<{ chatId: string; bookId?: string }>();
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -134,9 +185,9 @@ function useAgentController(
 
   async function persist(chat: AgentChat) {
     const next = [chat, ...historyRef.current.filter((record) => record.id !== chat.id)];
+    await saveHistory(agent, next);
     historyRef.current = next;
     if (mounted.current) setHistory(next);
-    await saveHistory(agent, next);
   }
 
   function select(bookId: string | undefined, chatId: string | null) {
@@ -147,18 +198,14 @@ function useAgentController(
     return historyRef.current.find((record) => record.id === chatId && record.bookId === bookId);
   }
 
-  function requiresFullConfirmation(bookId: string | undefined, chatId: string | null) {
-    return agent === "antigravity" && lastPermissionMode === "full" && !findChat(bookId, chatId);
-  }
-
   function getChat(bookId: string | undefined, chatId: string | null, title: string): AgentChat {
     return (
       findChat(bookId, chatId) ?? {
         id: crypto.randomUUID(),
         bookId,
         title,
-        permissionMode:
-          agent === "antigravity" && lastPermissionMode !== "full" ? lastPermissionMode : undefined,
+        updatedAt: Date.now(),
+        permissionMode: agent === "antigravity" ? lastPermissionMode : undefined,
         messages: [],
       }
     );
@@ -176,7 +223,6 @@ function useAgentController(
     setError("");
     const active = findChat(bookId, chatId);
     try {
-      // A new chat holds a separate confirmation even if Full Access was the last selection.
       if (active || permissionMode === "full") {
         const chat = active ?? getChat(bookId, chatId, title);
         setOperation({ chatId: chat.id, bookId });
@@ -185,6 +231,7 @@ function useAgentController(
           await running.client.close(running.session);
           runtime.current = null;
           setConfiguration(undefined);
+          setContextUsage(undefined);
         }
         const next = [
           { ...chat, permissionMode },
@@ -207,6 +254,49 @@ function useAgentController(
     }
   }
 
+  async function removeChat(bookId: string | undefined, chatId: string) {
+    if (
+      agent !== "antigravity" ||
+      !ready ||
+      controller.current ||
+      configLock.current ||
+      !findChat(bookId, chatId)
+    )
+      return;
+    configLock.current = true;
+    setConfiguring(true);
+    setOperation({ chatId, bookId });
+    setError("");
+    try {
+      const running = runtime.current;
+      if (running?.chatId === chatId) {
+        await running.client.close(running.session);
+        runtime.current = null;
+        setConfiguration(undefined);
+        setContextUsage(undefined);
+      }
+      const next = historyRef.current.filter((record) => record.id !== chatId);
+      await saveHistory(agent, next);
+      clearAntigravityContextUsage(chatId);
+      historyRef.current = next;
+      if (mounted.current) {
+        setHistory(next);
+        setSelections((current) => {
+          const key = bookId ?? "";
+          if (current[key] !== chatId) return current;
+          const updated = { ...current };
+          delete updated[key];
+          return updated;
+        });
+      }
+    } catch (error) {
+      if (mounted.current) setError(String(error));
+    } finally {
+      if (mounted.current) setConfiguring(false);
+      configLock.current = false;
+    }
+  }
+
   async function connect(chat: AgentChat, signal: AbortSignal) {
     await startDesktopReadingMcp();
     signal.throwIfAborted();
@@ -221,43 +311,95 @@ function useAgentController(
       running.permissionMode !== permissionMode
     ) {
       setConfiguration(undefined);
+      setContextUsage(undefined);
       if (running) await running.client.close(running.session);
       signal.throwIfAborted();
-      const client =
+      const client: DesktopAgentRuntime =
         agent === "codex"
           ? new CodexRuntime()
-          : new AntigravityRuntime(permissionMode, (options) => {
-              if (mounted.current) setConfiguration({ chatId: chat.id, options });
-            });
+          : new AntigravityRuntime(
+              permissionMode,
+              (options) => {
+                if (mounted.current && runtime.current?.client === client)
+                  setConfiguration(options ? { chatId: chat.id, options } : undefined);
+              },
+              (usage) => {
+                if (
+                  !mounted.current ||
+                  runtime.current?.client !== client ||
+                  !(client instanceof AntigravityRuntime)
+                )
+                  return;
+                const { model } = client.selection;
+                if (!model) return;
+                setContextUsage({ chatId: chat.id, model, usage });
+                saveAntigravityContextUsage(chat.id, model, usage);
+              },
+              chat.session
+                ? { model: chat.session.model, thoughtLevel: chat.thoughtLevel }
+                : lastAntigravitySelection(historyRef.current),
+            );
       running = { client, chatId: chat.id, permissionMode };
       runtime.current = running;
       const options = { readingSessionId: chat.id, bookId: chat.bookId };
-      if (chat.session) {
-        await client.resume(chat.session, options);
-        running.session = chat.session;
-      } else {
-        running.session = await client.start(options);
-        try {
-          await persist({ ...chat, session: running.session });
-        } catch (error) {
-          await client.close(running.session);
-          throw error;
+      try {
+        if (chat.session) {
+          await client.resume(chat.session, options);
+          running.session = chat.session;
+        } else {
+          running.session = await client.start(options);
         }
+        signal.throwIfAborted();
+        if (client instanceof AntigravityRuntime) {
+          const selection = client.selection;
+          if (
+            chat.session?.model &&
+            chat.session.model !== selection.model &&
+            readAntigravityContextUsage(chat.id, chat.session.model)
+          ) {
+            clearAntigravityContextUsage(chat.id);
+          }
+          running.session = { ...running.session, model: selection.model };
+          if (
+            !chat.session ||
+            selection.model !== chat.session.model ||
+            selection.thoughtLevel !== chat.thoughtLevel
+          ) {
+            await persist({
+              ...chat,
+              session: running.session,
+              thoughtLevel: selection.thoughtLevel,
+            });
+          }
+          if (selection.model)
+            localStorage.setItem(antigravitySelectionKey, JSON.stringify(selection));
+        } else if (!chat.session) {
+          await persist({ ...chat, session: running.session });
+        }
+      } catch (error) {
+        await client.close(running.session);
+        if (runtime.current === running) {
+          runtime.current = null;
+          setConfiguration(undefined);
+          setContextUsage(undefined);
+        }
+        throw error;
       }
     }
     signal.throwIfAborted();
     if (!running.session) throw new Error("Could not initialize the agent conversation.");
-    return { client: running.client, session: running.session };
+    return {
+      client: running.client,
+      session: running.session,
+      thoughtLevel:
+        running.client instanceof AntigravityRuntime
+          ? running.client.selection.thoughtLevel
+          : undefined,
+    };
   }
 
   async function prepare(bookId: string | undefined, chatId: string | null, title: string) {
-    if (
-      controller.current ||
-      configLock.current ||
-      !ready ||
-      requiresFullConfirmation(bookId, chatId)
-    )
-      return;
+    if (controller.current || configLock.current || !ready) return;
     const abort = new AbortController();
     controller.current = abort;
     const chat = getChat(bookId, chatId, title);
@@ -265,8 +407,18 @@ function useAgentController(
     setError("");
     setBusy(true);
     try {
+      if (agent === "antigravity" && !chatId) {
+        // Record the inherited permission before the native host validates this chat and book.
+        await persist(chat);
+        const key = bookId ?? "";
+        if (!abort.signal.aborted) {
+          setSelections((current) =>
+            current[key] === selections[key] ? { ...current, [key]: chat.id } : current,
+          );
+        }
+      }
       await connect(chat, abort.signal);
-      select(bookId, chat.id);
+      if (agent === "codex") select(bookId, chat.id);
     } catch (error) {
       if (!abort.signal.aborted && mounted.current) setError(String(error));
     } finally {
@@ -295,9 +447,20 @@ function useAgentController(
     setError("");
     try {
       await running.client.setConfigOption(running.session, id, value);
-      if (chat && id === "model") {
-        running.session = { ...running.session, model: value };
-        await persist({ ...chat, session: running.session });
+      if (chat && running.client instanceof AntigravityRuntime) {
+        if (id === "model") {
+          const previousModel = running.session.model;
+          if (previousModel && readAntigravityContextUsage(chatId, previousModel))
+            clearAntigravityContextUsage(chatId);
+          setContextUsage((current) =>
+            current?.chatId === chatId && current.model === previousModel ? undefined : current,
+          );
+        }
+        const selection = running.client.selection;
+        running.session = { ...running.session, model: selection.model };
+        await persist({ ...chat, session: running.session, thoughtLevel: selection.thoughtLevel });
+        if (selection.model)
+          localStorage.setItem(antigravitySelectionKey, JSON.stringify(selection));
       }
     } catch (error) {
       setError(String(error));
@@ -320,13 +483,7 @@ function useAgentController(
     chatId: string | null;
     quotes?: AttachedQuote[];
   }): Promise<void> {
-    if (
-      (!text.trim() && quotes.length === 0) ||
-      controller.current ||
-      configLock.current ||
-      !ready ||
-      requiresFullConfirmation(bookId, chatId)
-    )
+    if ((!text.trim() && quotes.length === 0) || controller.current || configLock.current || !ready)
       return;
     const abort = new AbortController();
     controller.current = abort;
@@ -371,10 +528,10 @@ function useAgentController(
 
     try {
       select(bookId, chat.id);
-      chat = { ...chat, messages: [...chat.messages, user] };
+      chat = { ...chat, updatedAt: user.createdAt, messages: [...chat.messages, user] };
       await persist(chat);
       const running = await connect(chat, abort.signal);
-      chat = { ...chat, session: running.session };
+      chat = { ...chat, session: running.session, thoughtLevel: running.thoughtLevel };
       const request =
         agent === "antigravity" && chat.bookId
           ? `For this ReadAny chat, use the authorized ReadAny MCP for book passages. Cite only exact evidence IDs from ReadAny using [[book-1]] marks. Use Antigravity's own tools for public web searches. Keep private book excerpts and notes out of web queries unless I explicitly request it.\n\n${prompt}`
@@ -442,7 +599,11 @@ function useAgentController(
             },
             chat.bookId,
           );
-          await persist({ ...chat, messages: [...chat.messages, completed] });
+          await persist({
+            ...chat,
+            updatedAt: Date.now(),
+            messages: [...chat.messages, completed],
+          });
         }
       } catch (err) {
         if (mounted.current) setError(String(err));
@@ -490,9 +651,11 @@ function useAgentController(
     selections,
     operation,
     select,
+    removeChat,
     send,
     prepare,
     configuration,
+    contextUsage,
     configuring,
     setConfig,
     lastPermissionMode,

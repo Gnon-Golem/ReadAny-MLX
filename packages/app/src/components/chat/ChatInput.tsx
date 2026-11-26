@@ -5,7 +5,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AttachedQuote } from "@readany/core/types";
 import { Brain, EyeOff, Quote, Send, Square, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 export type { AttachedQuote };
 
@@ -21,6 +21,7 @@ interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
   showDeepThinking?: boolean;
+  controls?: { leading?: ReactNode; trailing?: ReactNode };
   quotes?: AttachedQuote[];
   onRemoveQuote?: (id: string) => void;
 }
@@ -32,6 +33,7 @@ export function ChatInput({
   disabled,
   placeholder,
   showDeepThinking = true,
+  controls,
   quotes = [],
   onRemoveQuote,
 }: ChatInputProps) {
@@ -81,6 +83,31 @@ export function ChatInput({
   const toggleSpoilerFree = useCallback(() => {
     setSpoilerFree((prev) => !prev);
   }, []);
+
+  const submit = isStreaming ? (
+    <button
+      type="button"
+      onClick={onStop}
+      aria-label={t("chat.stopGeneration", "Stop generation")}
+      className={`flex size-7 items-center justify-center rounded-full border border-destructive/20 bg-destructive text-destructive-foreground shadow-sm transition-colors hover:bg-destructive/90 ${controls ? "shrink-0" : ""}`}
+    >
+      <Square className="size-3" />
+    </button>
+  ) : (
+    <button
+      type="button"
+      disabled={disabled || (!value.trim() && quotes.length === 0)}
+      onClick={() => handleSend()}
+      aria-label={t("chat.send", "Send")}
+      className={`flex size-7 items-center justify-center rounded-full transition-colors ${controls ? "shrink-0" : ""} ${
+        value.trim() || quotes.length > 0
+          ? "border border-primary/20 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+          : "border border-border bg-background text-muted-foreground hover:bg-muted"
+      } disabled:cursor-not-allowed disabled:opacity-50`}
+    >
+      <Send className="size-3.5" />
+    </button>
+  );
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -138,8 +165,15 @@ export function ChatInput({
           className="w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           style={{ minHeight: 36, maxHeight: 160 }}
         />
-        <div className="flex items-center justify-between px-3 pb-2">
-          <div className="flex items-center gap-1">
+        <div
+          className={
+            controls
+              ? "flex flex-wrap items-center justify-between gap-1.5 px-3 pb-2"
+              : "flex items-center justify-between px-3 pb-2"
+          }
+        >
+          <div className="flex min-w-0 max-w-full items-center gap-1">
+            {controls?.leading}
             {showDeepThinking && (
               <button
                 type="button"
@@ -169,29 +203,13 @@ export function ChatInput({
               </button>
             )}
           </div>
-          {isStreaming ? (
-            <button
-              type="button"
-              onClick={onStop}
-              aria-label={t("chat.stopGeneration", "Stop generation")}
-              className="flex size-7 items-center justify-center rounded-full border border-destructive/20 bg-destructive text-destructive-foreground shadow-sm transition-colors hover:bg-destructive/90"
-            >
-              <Square className="size-3" />
-            </button>
+          {controls ? (
+            <div className="ml-auto flex min-w-0 max-w-full items-center gap-1">
+              {controls.trailing}
+              {submit}
+            </div>
           ) : (
-            <button
-              type="button"
-              disabled={disabled || (!value.trim() && quotes.length === 0)}
-              onClick={() => handleSend()}
-              aria-label={t("chat.send", "Send")}
-              className={`flex size-7 items-center justify-center rounded-full transition-colors ${
-                value.trim() || quotes.length > 0
-                  ? "border border-primary/20 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-                  : "border border-border bg-background text-muted-foreground hover:bg-muted"
-              } disabled:cursor-not-allowed disabled:opacity-50`}
-            >
-              <Send className="size-3.5" />
-            </button>
+            submit
           )}
         </div>
       </div>
